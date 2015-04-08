@@ -36,19 +36,10 @@
 	ldi tmp, high(RAMEND)
 	out SPH, tmp
 
-	rcall delay_some_ms ; wait for display to be ready
-	rcall delay_some_ms
-	rcall delay_some_ms
-
-	clr tmp				; set display as output
-	out LCD, tmp
-	ser tmp
-	out LCD_DD, tmp
-
-	rcall init_lcd		; init lcd
-
 	ldi tmp, (1<<CTC1) | (1<<CS12) | (1<<CS10) | (1<<WGM12)	; enable timer with prescaler 1024
 	out TCCR1B, tmp
+
+	rcall init_lcd		; init lcd
 
 	ldi tmp, high((freq/1024))
 	out OCR1AH, tmp
@@ -78,7 +69,6 @@ loop:
 	rjmp loop
 	inc counter
 	rcall update_number
-	rcall test_usart
 	cbr int_flags, 1<<counter_flag
 	rjmp loop
 
@@ -86,7 +76,112 @@ timer1:
 	sbr int_flags, 1<<counter_flag
 	reti
 
+update_number:
+	inc s
+	cpi s, 60
+	brne display_time
+	clr s
+	inc m
+	cpi m, 60
+	brne display_time
+	clr m
+	inc h
+display_time:
+	ldi arg, 0x80
+	rcall usart_send
+	mov arg, h
+	rcall show_segment
+	mov arg, m
+	rcall show_segment
+	mov arg, s
+	rcall show_segment
+	ldi arg, 0b0111
+	rcall usart_send
+	
+	ldi arg, 0x80
+	rcall send_ins
+	mov arg, h
+	rcall show_ascii
+	ldi arg, ':'
+	rcall show_char
+	mov arg, m
+	rcall show_ascii
+	ldi arg, ':'
+	rcall show_char
+	mov arg, s
+	rcall show_ascii
+	
+	ret
+
+init_usart:
+	ldi tmp, (1 << RXEN) | (1 << TXEN) ; set send and receive bit
+	out UCSRB, tmp
+
+	ldi tmp, (1 << URSEL) | (1 << UCSZ0) | (1 << UCSZ1)
+	out UCSRC, tmp
+
+	ldi tmp, high(BAUD_PRESCALE)
+	out UBRRH, tmp
+	ldi tmp, low(BAUD_PRESCALE)
+	out UBRRL, tmp
+	ret
+	
+usart_recv:
+	sbis UCSRA, RXC
+	rjmp usart_recv
+	in arg, UDR
+	ret
+	
+usart_send:
+	sbis UCSRA, UDRE
+	rjmp usart_send
+	out UDR, arg
+	ret
+	
+numbertable: .db 0b1110111, 0b0100100, 0b1011101, 0b1101101, 0b0101110, 0b1101011, 0b1111011, 0b0100101, 0b1111111, 0b1101111
+segment_digit:
+	cpi arg, 10
+	brge segment_error
+	ldi ZH, high(numbertable*2)
+	ldi ZL, low(numbertable*2)
+	add ZL, arg
+	clr arg
+	adc ZH, arg
+	lpm arg, Z
+	ret
+segment_error:
+	ldi arg, 1<<3
+	ret
+	
+show_segment:
+	clr tmp
+seg_tens:
+	cpi arg, 10
+	brlo seg_end_tens
+	inc tmp
+	subi arg, 10
+	rjmp seg_tens
+
+seg_end_tens:
+	push arg
+	mov arg, tmp
+	rcall segment_digit
+	rcall usart_send
+	pop arg
+	rcall segment_digit
+	rcall usart_send
+	ret
+
 init_lcd:
+	rcall delay_some_ms ; wait for display to be ready
+	rcall delay_some_ms
+	rcall delay_some_ms
+
+	clr tmp				; set display as output
+	out LCD, tmp
+	ser tmp
+	out LCD_DD, tmp
+	
 	rcall init_4bitmode
 	ldi arg, 0x28
 	rcall send_ins
@@ -174,31 +269,6 @@ delay_one_2:
 	brne delay_1
 	ret
 
-update_number:
-	inc s
-	cpi s, 60
-	brne display_time
-	clr s
-	inc m
-	cpi m, 60
-	brne display_time
-	clr m
-	inc h
-display_time:
-	ldi arg, 0x80
-	rcall send_ins
-	mov arg, h
-	rcall show_ascii
-	ldi arg, ':'
-	rcall show_char
-	mov arg, m
-	rcall show_ascii
-	ldi arg, ':'
-	rcall show_char
-	mov arg, s
-	rcall show_ascii
-	ret
-
 show_ascii:
 	clr tmp
 tens:
@@ -216,78 +286,4 @@ end_tens:
 	pop arg
 	subi arg, -48
 	rcall show_char
-	ret
-	
-init_usart:
-	ldi tmp, (1 << RXEN) | (1 << TXEN) ; set send and receive bit
-	out UCSRB, tmp
-
-	ldi tmp, (1 << URSEL) | (1 << UCSZ0) | (1 << UCSZ1)
-	out UCSRC, tmp
-
-	ldi tmp, high(BAUD_PRESCALE)
-	out UBRRH, tmp
-	ldi tmp, low(BAUD_PRESCALE)
-	out UBRRL, tmp
-	ret
-	
-usart_recv:
-	sbis UCSRA, RXC
-	rjmp usart_recv
-	in arg, UDR
-	ret
-	
-usart_send:
-	sbis UCSRA, UDRE
-	rjmp usart_send
-	out UDR, arg
-	ret
-	
-test_usart:
-	;ldi arg, 0x80
-	;rcall usart_send
-	clr tmp
-send_digits:
-	mov arg, h
-	rcall show_segment
-	mov arg, m
-	rcall show_segment
-	mov arg, s
-	rcall show_segment
-	ldi arg, 0b0111
-	rcall usart_send
-	ret
-	
-numbertable: .db 0b1110111, 0b0100100, 0b1011101, 0b1101101, 0b0101110, 0b1101011, 0b1111011, 0b0100101, 0b1111111, 0b1101111
-segment_digit:
-	cpi arg, 10
-	brge segment_error
-	ldi ZH, high(numbertable*2)
-	ldi ZL, low(numbertable*2)
-	add ZL, arg
-	clr arg
-	adc ZH, arg
-	lpm arg, Z
-	ret
-segment_error:
-	ldi arg, 1<<3
-	ret
-	
-show_segment:
-	clr tmp
-seg_tens:
-	cpi arg, 10
-	brlo seg_end_tens
-	inc tmp
-	subi arg, 10
-	rjmp tens
-
-seg_end_tens:
-	push arg
-	mov arg, tmp
-	rcall segment_digit
-	rcall usart_send
-	pop arg
-	rcall segment_digit
-	rcall usart_send
 	ret
