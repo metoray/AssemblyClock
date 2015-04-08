@@ -1,5 +1,7 @@
  .include "m32def.inc"
- .equ freq = 11059200 ; frequency in hertz
+ .equ FREQ = 11059200 ; frequency in hertz
+ .equ USART_BAUDRATE=19200
+ .equ BAUD_PRESCALE=(((FREQ / (USART_BAUDRATE * 16))) - 1)
  .equ counter_flag = 0
  .equ LCD=PORTD
  .equ LCD_DD=DDRD
@@ -211,4 +213,29 @@ end_tens:
 	pop arg
 	subi arg, -48
 	rcall show_char
+	ret
+	
+init_usart:
+	ldi tmp, (1 << RXEN) | (1 << TXEN) ; set send and receive bit
+	out UCSRB, tmp
+
+	ldi tmp, (1 << URSEL) | (1 << UCSZ0) | (1 << UCSZ1)
+	out UCSRC, tmp
+
+	ldi tmp, high(BAUD_PRESCALE)
+	out UBRRH, tmp
+	ldi tmp, low(BAUD_PRESCALE)
+	out UBRRL, tmp
+	ret
+	
+usart_recv:
+	sbis UCSRA, RXC
+	rjmp usart_in
+	in arg, UDR
+	ret
+	
+usart_send:
+	sbis UCSRA, UDRE
+	rjmp usart_out
+	out UDR, arg
 	ret
