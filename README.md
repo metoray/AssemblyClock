@@ -1,2 +1,2 @@
 # AssemblyClock
-A assembled clock
+An assembled clock
