@@ -62,6 +62,8 @@
 	out TCNT1H, tmp
 	out TCNT1L, tmp
 	
+	rcall init_usart	; init serial communication
+	
 	clr counter
 	
 	ldi h, 3
@@ -69,12 +71,14 @@
 	ldi s, 3
 
 	sei
+	
 
 loop:
 	sbrs int_flags, counter_flag
 	rjmp loop
 	inc counter
 	rcall update_number
+	rcall test_usart
 	cbr int_flags, 1<<counter_flag
 	rjmp loop
 
@@ -193,7 +197,6 @@ display_time:
 	rcall show_char
 	mov arg, s
 	rcall show_ascii
-	
 	ret
 
 show_ascii:
@@ -230,12 +233,61 @@ init_usart:
 	
 usart_recv:
 	sbis UCSRA, RXC
-	rjmp usart_in
+	rjmp usart_recv
 	in arg, UDR
 	ret
 	
 usart_send:
 	sbis UCSRA, UDRE
-	rjmp usart_out
+	rjmp usart_send
 	out UDR, arg
+	ret
+	
+test_usart:
+	;ldi arg, 0x80
+	;rcall usart_send
+	clr tmp
+send_digits:
+	mov arg, h
+	rcall show_segment
+	mov arg, m
+	rcall show_segment
+	mov arg, s
+	rcall show_segment
+	ldi arg, 0b0111
+	rcall usart_send
+	ret
+	
+numbertable: .db 0b1110111, 0b0100100, 0b1011101, 0b1101101, 0b0101110, 0b1101011, 0b1111011, 0b0100101, 0b1111111, 0b1101111
+segment_digit:
+	cpi arg, 10
+	brge segment_error
+	ldi ZH, high(numbertable*2)
+	ldi ZL, low(numbertable*2)
+	add ZL, arg
+	clr arg
+	adc ZH, arg
+	lpm arg, Z
+	ret
+segment_error:
+	ldi arg, 1<<3
+	ret
+	
+show_segment:
+	clr tmp
+seg_tens:
+	cpi arg, 10
+	brlo seg_end_tens
+	inc tmp
+	subi arg, 10
+	rjmp tens
+
+seg_end_tens:
+	push arg
+	mov arg, tmp
+	rcall segment_digit
+	rcall usart_send
+	pop arg
+	rcall segment_digit
+	rcall usart_send
 	ret
