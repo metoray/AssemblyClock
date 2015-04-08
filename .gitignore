@@ -10,3 +10,9 @@
 
 # virtual machine crash logs, see http://www.java.com/en/download/help/error_hotspot.xml
 hs_err_pid*
+Java/alarm.wav
+Java/compile.bat
+Java/run-COM5.bat
+Java/run-COM8.bat
+Java/rxtxParallel.dll
+Java/rxtxSerial.dll
