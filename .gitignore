@@ -17,3 +17,8 @@ Java/run-COM8.bat
 Java/rxtxParallel.dll
 Java/rxtxSerial.dll
 Java/start.bat
+AssemblyClock.hex
+AssemblyClock.lst
+compile.bat
+program.bat
+test.bat
