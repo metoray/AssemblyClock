@@ -8,7 +8,7 @@
  .equ LCD_DD=DDRD
  .equ ENABLE=2
  .equ RS=3
- .equ BLINK_COLONS=0
+ .equ BLINK_ALARM=0
  .equ BLINK_SECONDS=1
  .equ BLINK_MINUTES=2
  .equ BLINK_HOURS=3
@@ -134,8 +134,6 @@ update_time:
 	rcall update_number
 	
 display_time:
-	sbrc blink, BLINK_COLONS+4
-	set		; set t flag to handle colons for the lcd display
 	push blink
 	ldi ZH, high(time)
 	ldi ZL, low(time)
@@ -162,16 +160,13 @@ display_time_loop_continue:
 	tst tmp
 	breq display_time_loop_end
 	ldi arg, ':'
-	brtc display_time_loop_send_colon
-	ldi arg, ' '
-display_time_loop_send_colon:
 	rcall show_char
 	rjmp display_time_loop
 display_time_loop_end:
 	pop blink
 	ldi arg, 0b0111
-	sbrc blink, BLINK_COLONS+4
-	ldi arg, 0b0001
+	sbrc blink, BLINK_ALARM+4
+	cbr arg, 0b0001
 	rcall usart_send
 	clt
 	ret
