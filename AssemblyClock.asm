@@ -171,7 +171,7 @@ display_time_loop_end:
 	pop blink
 	ldi arg, 0b0111
 	sbrc blink, BLINK_COLONS+4
-	ldi arg, 0b0100
+	ldi arg, 0b0001
 	rcall usart_send
 	clt
 	ret
