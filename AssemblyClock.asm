@@ -361,6 +361,3 @@ end_tens:
 	pop tmp
 	pop arg
 	ret
-	
-show_ascii_blank:
-	
