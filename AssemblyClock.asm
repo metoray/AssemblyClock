@@ -8,6 +8,10 @@
  .equ LCD_DD=DDRD
  .equ ENABLE=2
  .equ RS=3
+ .equ BLINK_COLONS=0
+ .equ BLINK_SECONDS=1
+ .equ BLINK_MINUTES=2
+ .equ BLINK_HOURS=3
 
  .def tmp = r16
  .def counter = r17
@@ -65,21 +69,33 @@
 	ldi tmp, 55
 	st Z+, tmp	;seconds
 	
+	ldi blink, 0xF
+	
 	sei
 	
 
 loop:
 	sbrs int_flags, counter_flag
 	rjmp loop_blink
+	
 	rcall update_time
+	
 	cbr int_flags, 1<<counter_flag
+
 loop_blink:
 	sbrs int_flags, blink_flag
 	rjmp loop
-	ldi tmp, 1<<3
+	
+	mov tmp, blink
+	swap tmp
+	andi tmp, 0xF0
 	eor blink, tmp
-	cbr int_flags, 1<<blink_flag
+	com tmp
+	or blink, tmp
 	rcall display_time
+	
+	cbr int_flags, 1<<blink_flag
+	
 	rjmp loop
 
 timer1:
@@ -118,6 +134,9 @@ update_time:
 	rcall update_number
 	
 display_time:
+	sbrc blink, BLINK_COLONS+4
+	set		; set t flag to handle colons for the lcd display
+	push blink
 	ldi ZH, high(time)
 	ldi ZL, low(time)
 	ldi arg, 0x80
@@ -126,17 +145,35 @@ display_time:
 	ldi tmp, 3
 display_time_loop:
 	ld arg, Z+
+	lsl blink
+	brcs display_time_loop_blank
 	rcall show_ascii
 	rcall show_segment
+	rjmp display_time_loop_continue
+display_time_loop_blank:
+	ldi arg, ' '
+	rcall show_char
+	rcall show_char
+	clr arg
+	rcall usart_send
+	rcall usart_send
+display_time_loop_continue:
 	dec tmp
 	tst tmp
 	breq display_time_loop_end
 	ldi arg, ':'
+	brtc display_time_loop_send_colon
+	ldi arg, ' '
+display_time_loop_send_colon:
 	rcall show_char
 	rjmp display_time_loop
 display_time_loop_end:
+	pop blink
 	ldi arg, 0b0111
+	sbrc blink, BLINK_COLONS+4
+	ldi arg, 0b0100
 	rcall usart_send
+	clt
 	ret
 
 init_usart:
@@ -263,6 +300,7 @@ send_ins:
 	
 show_char:
 	push arg
+	push arg
 	andi arg, 0xf0   
 	sbr arg, (1 << RS)
 	out LCD, arg
@@ -273,6 +311,7 @@ show_char:
 	sbr arg, (1 << RS)
 	out LCD, arg
 	rcall clock_in
+	pop arg
 	ret
 	
 	
@@ -327,3 +366,6 @@ end_tens:
 	pop tmp
 	pop arg
 	ret
+	
+show_ascii_blank:
+	
