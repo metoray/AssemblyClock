@@ -58,9 +58,11 @@
 	
 	ldi ZH, high(time)
 	ldi ZL, low(time)
-	ldi tmp, 9
+	ldi tmp, 4
 	st Z+, tmp	;hours
+	ldi tmp, 59
 	st Z+, tmp	;minutes
+	ldi tmp, 55
 	st Z+, tmp	;seconds
 	
 	sei
@@ -116,44 +118,25 @@ update_time:
 	rcall update_number
 	
 display_time:
-	ldi arg, 0x80
-	rcall usart_send
 	ldi ZH, high(time)
 	ldi ZL, low(time)
+	ldi arg, 0x80
+	rcall send_ins
+	rcall usart_send
 	ldi tmp, 3
 display_time_loop:
 	ld arg, Z+
+	rcall show_ascii
 	rcall show_segment
 	dec tmp
 	tst tmp
-	brne display_time_loop
-	
-	ldi arg, 0b0111
-	rcall usart_send
-	
-	ldi arg, 0x01
-	rcall send_ins
-	sbrc blink, 3
-	rjmp end_display_time
-	
-	ldi arg, 0x80
-	rcall send_ins
-	
-	ldi ZH, high(time)
-	ldi ZL, low(time)
-	ldi tmp, 3
-display_time_loop_lcd:
-	dec tmp
-	ld arg, Z+
-	rcall show_ascii
-	tst tmp
-	breq display_time_loop_no_colon
+	breq display_time_loop_end
 	ldi arg, ':'
 	rcall show_char
-display_time_loop_no_colon:
-	tst tmp
-	brne display_time_loop_lcd
-end_display_time:
+	rjmp display_time_loop
+display_time_loop_end:
+	ldi arg, 0b0111
+	rcall usart_send
 	ret
 
 init_usart:
@@ -183,6 +166,8 @@ usart_send:
 	
 numbertable: .db 0b1110111, 0b0100100, 0b1011101, 0b1101101, 0b0101110, 0b1101011, 0b1111011, 0b0100101, 0b1111111, 0b1101111
 segment_digit:
+	push ZL
+	push ZH
 	cpi arg, 10
 	brge segment_error
 	ldi ZH, high(numbertable*2)
@@ -191,12 +176,15 @@ segment_digit:
 	clr arg
 	adc ZH, arg
 	lpm arg, Z
+	pop ZH
+	pop ZL
 	ret
 segment_error:
 	ldi arg, 1<<3
 	ret
 	
 show_segment:
+	push arg
 	push tmp
 	clr tmp
 seg_tens:
@@ -215,6 +203,7 @@ seg_end_tens:
 	rcall segment_digit
 	rcall usart_send
 	pop tmp
+	pop arg
 	ret
 
 init_lcd:
@@ -259,6 +248,7 @@ init_4bitmode:
 	
 send_ins:
 	push arg
+	push arg
 	andi arg, 0xF0
 	out LCD, arg
 	rcall clock_in
@@ -268,6 +258,7 @@ send_ins:
 	out LCD, arg
 	rcall clock_in
 	rcall delay_some_ms
+	pop arg
 	ret
 	
 show_char:
@@ -315,6 +306,7 @@ delay_one_2:
 	ret
 
 show_ascii:
+	push arg
 	push tmp
 	clr tmp
 tens:
@@ -333,4 +325,5 @@ end_tens:
 	subi arg, -48
 	rcall show_char
 	pop tmp
+	pop arg
 	ret
