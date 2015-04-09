@@ -3,6 +3,7 @@
  .equ USART_BAUDRATE=19200
  .equ BAUD_PRESCALE=(((FREQ / (USART_BAUDRATE * 16))) - 1)
  .equ counter_flag = 0
+ .equ blink_flag = 1
  .equ LCD=PORTD
  .equ LCD_DD=DDRD
  .equ ENABLE=2
@@ -17,6 +18,7 @@
  .def h=r22
  .def m=r23
  .def s=r24
+ .def blink=r25
 
  .dseg
  number: .byte 4
@@ -41,9 +43,9 @@
 
 	rcall init_lcd		; init lcd
 
-	ldi tmp, high((freq/1024))
+	ldi tmp, high((freq/1024)/4)
 	out OCR1AH, tmp
-	ldi tmp, low((freq/1024))
+	ldi tmp, low((freq/1024)/4)
 	out OCR1AL, tmp
 
 	ldi tmp, 1<<OCIE1A	; enable timer compare interrupt
@@ -66,14 +68,27 @@
 
 loop:
 	sbrs int_flags, counter_flag
-	rjmp loop
-	inc counter
+	rjmp loop_blink
 	rcall update_number
 	cbr int_flags, 1<<counter_flag
+loop_blink:
+	sbrs int_flags, blink_flag
+	rjmp loop
+	ldi tmp, 1<<3
+	eor blink, tmp
+	cbr int_flags, 1<<blink_flag
+	rcall display_time
 	rjmp loop
 
 timer1:
+	inc counter
+	sbrs counter, 0
+	sbr int_flags, 1<<blink_flag
+	cpi counter, 4
+	brne end_timer1
 	sbr int_flags, 1<<counter_flag
+	clr counter
+end_timer1:
 	reti
 
 update_number:
@@ -98,6 +113,10 @@ display_time:
 	ldi arg, 0b0111
 	rcall usart_send
 	
+	ldi arg, 0x01
+	rcall send_ins
+	sbrc blink, 3
+	rjmp end_display_time
 	ldi arg, 0x80
 	rcall send_ins
 	mov arg, h
@@ -110,7 +129,7 @@ display_time:
 	rcall show_char
 	mov arg, s
 	rcall show_ascii
-	
+end_display_time:
 	ret
 
 init_usart:
