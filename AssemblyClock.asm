@@ -15,13 +15,10 @@
  .def arg=r19
  .def counter1=r20
  .def counter2=r21
- .def h=r22
- .def m=r23
- .def s=r24
  .def blink=r25
 
  .dseg
- number: .byte 4
+ time: .byte 3
 
  .cseg
 
@@ -59,17 +56,20 @@
 	
 	clr counter
 	
-	ldi h, 3
-	ldi m, 4
-	ldi s, 3
-
+	ldi ZH, high(time)
+	ldi ZL, low(time)
+	ldi tmp, 9
+	st Z+, tmp	;hours
+	st Z+, tmp	;minutes
+	st Z+, tmp	;seconds
+	
 	sei
 	
 
 loop:
 	sbrs int_flags, counter_flag
 	rjmp loop_blink
-	rcall update_number
+	rcall update_time
 	cbr int_flags, 1<<counter_flag
 loop_blink:
 	sbrs int_flags, blink_flag
@@ -92,24 +92,42 @@ end_timer1:
 	reti
 
 update_number:
-	inc s
-	cpi s, 60
-	brne display_time
-	clr s
-	inc m
-	cpi m, 60
-	brne display_time
-	clr m
-	inc h
+	ld tmp, -Z
+	inc tmp
+	cp tmp, arg
+	clc
+	brne update_number_no_carry
+	clr tmp
+	sec
+update_number_no_carry:
+	st Z, tmp
+	ret
+	
+
+update_time:
+	ldi ZH, high(time+3)
+	ldi ZL, low(time+3)
+	ldi arg, 60
+	rcall update_number
+	brcc display_time
+	rcall update_number
+	brcc display_time
+	ldi arg, 24
+	rcall update_number
+	
 display_time:
 	ldi arg, 0x80
 	rcall usart_send
-	mov arg, h
+	ldi ZH, high(time)
+	ldi ZL, low(time)
+	ldi tmp, 3
+display_time_loop:
+	ld arg, Z+
 	rcall show_segment
-	mov arg, m
-	rcall show_segment
-	mov arg, s
-	rcall show_segment
+	dec tmp
+	tst tmp
+	brne display_time_loop
+	
 	ldi arg, 0b0111
 	rcall usart_send
 	
@@ -117,18 +135,24 @@ display_time:
 	rcall send_ins
 	sbrc blink, 3
 	rjmp end_display_time
+	
 	ldi arg, 0x80
 	rcall send_ins
-	mov arg, h
+	
+	ldi ZH, high(time)
+	ldi ZL, low(time)
+	ldi tmp, 3
+display_time_loop_lcd:
+	dec tmp
+	ld arg, Z+
 	rcall show_ascii
+	tst tmp
+	breq display_time_loop_no_colon
 	ldi arg, ':'
 	rcall show_char
-	mov arg, m
-	rcall show_ascii
-	ldi arg, ':'
-	rcall show_char
-	mov arg, s
-	rcall show_ascii
+display_time_loop_no_colon:
+	tst tmp
+	brne display_time_loop_lcd
 end_display_time:
 	ret
 
@@ -173,6 +197,7 @@ segment_error:
 	ret
 	
 show_segment:
+	push tmp
 	clr tmp
 seg_tens:
 	cpi arg, 10
@@ -189,6 +214,7 @@ seg_end_tens:
 	pop arg
 	rcall segment_digit
 	rcall usart_send
+	pop tmp
 	ret
 
 init_lcd:
@@ -289,6 +315,7 @@ delay_one_2:
 	ret
 
 show_ascii:
+	push tmp
 	clr tmp
 tens:
 	cpi arg, 10
@@ -305,4 +332,5 @@ end_tens:
 	pop arg
 	subi arg, -48
 	rcall show_char
+	pop tmp
 	ret
