@@ -13,6 +13,10 @@
  .equ BLINK_SECONDS=1
  .equ BLINK_MINUTES=2
  .equ BLINK_HOURS=3
+ .equ ALARM_VISIBLE=BLINK_ALARM+4
+ .equ SECONDS_VISIBLE=BLINK_SECONDS+4
+ .equ MINUTES_VISIBLE=BLINK_MINUTES+4
+ .equ HOURS_VISIBLE=HOURS+4
 
  .def tmp = r16
  .def counter = r17
@@ -71,6 +75,8 @@
 	st Z+, tmp	;seconds
 	
 	ldi blink, 0x0
+	
+	rcall create_character
 	
 	sei
 	
@@ -182,6 +188,9 @@ display_time_loop_continue:
 	rcall show_char
 	rjmp display_time_loop
 display_time_loop_end:
+	ldi arg, 0x0
+	sbrc blink, 1<<BLINK_ALARM+4
+	rcall show_char
 	pop blink
 	ldi arg, 0b0111
 	sbrc blink, BLINK_ALARM+4
@@ -268,7 +277,7 @@ init_lcd:
 	out LCD_DD, tmp
 	
 	rcall init_4bitmode
-	ldi arg, 0x28
+	ldi arg, 0x2C
 	rcall send_ins
 	ldi arg, 0x0C
 	rcall send_ins
@@ -378,5 +387,28 @@ end_tens:
 	subi arg, -48
 	rcall show_char
 	pop tmp
+	pop arg
+	ret
+	
+create_character:
+	push arg
+	ldi arg, 0x40
+	rcall send_ins
+	ldi arg, 0x0
+	rcall show_char
+	ldi arg, 0x4
+	rcall show_char
+	ldi arg, 0xe
+	rcall show_char
+	rcall show_char
+	rcall show_char
+	ldi arg, 0x1f
+	rcall show_char
+	ldi arg, 0x4
+	rcall show_char
+	ldi arg, 0x0
+	rcall show_char
+	ldi arg, 0x80
+	rcall send_ins
 	pop arg
 	ret
