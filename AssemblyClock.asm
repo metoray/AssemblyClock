@@ -4,6 +4,7 @@
  .equ BAUD_PRESCALE=(((FREQ / (USART_BAUDRATE * 16))) - 1)
  .equ counter_flag = 0
  .equ blink_flag = 1
+ .equ update_display_flag = 2
  .equ LCD=PORTD
  .equ LCD_DD=DDRD
  .equ ENABLE=2
@@ -84,7 +85,7 @@ loop:
 
 loop_blink:
 	sbrs int_flags, blink_flag
-	rjmp loop
+	rjmp loop_update_display
 	
 	mov tmp, blink
 	swap tmp
@@ -92,9 +93,18 @@ loop_blink:
 	eor blink, tmp
 	com tmp
 	or blink, tmp
-	rcall display_time
+	sbr int_flags, 1<<update_display_flag
+	
 	
 	cbr int_flags, 1<<blink_flag
+	
+loop_update_display:
+	sbrs int_flags, update_display_flag
+	rjmp loop
+	
+	rcall display_time
+	
+	cbr int_flags, 1<<update_display_flag
 	
 	rjmp loop
 
@@ -127,12 +137,15 @@ update_time:
 	ldi ZL, low(time+3)
 	ldi arg, 60
 	rcall update_number
-	brcc display_time
+	brcc update_time_end
 	rcall update_number
-	brcc display_time
+	brcc update_time_end
 	ldi arg, 24
 	rcall update_number
-	
+	sbr int_flags, 1<<update_display_flag
+update_time_end:
+ret
+
 display_time:
 	push blink
 	ldi ZH, high(time)
