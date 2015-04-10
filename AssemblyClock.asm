@@ -70,7 +70,7 @@
 	ldi tmp, 55
 	st Z+, tmp	;seconds
 	
-	ldi blink, 0xF
+	ldi blink, 0x0
 	
 	sei
 	
@@ -92,6 +92,7 @@ loop_blink:
 	andi tmp, 0xF0
 	eor blink, tmp
 	com tmp
+	andi tmp, 0xF0
 	or blink, tmp
 	sbr int_flags, 1<<update_display_flag
 	
@@ -109,6 +110,8 @@ loop_update_display:
 	rjmp loop
 
 timer1:
+	push tmp
+	in tmp, SREG
 	inc counter
 	sbrs counter, 0
 	sbr int_flags, 1<<blink_flag
@@ -117,6 +120,8 @@ timer1:
 	sbr int_flags, 1<<counter_flag
 	clr counter
 end_timer1:
+	out SREG, tmp
+	pop tmp
 	reti
 
 update_number:
@@ -142,11 +147,12 @@ update_time:
 	brcc update_time_end
 	ldi arg, 24
 	rcall update_number
-	sbr int_flags, 1<<update_display_flag
 update_time_end:
+	sbr int_flags, 1<<update_display_flag
 ret
 
 display_time:
+	rcall delay_some_ms
 	push blink
 	ldi ZH, high(time)
 	ldi ZL, low(time)
@@ -157,7 +163,7 @@ display_time:
 display_time_loop:
 	ld arg, Z+
 	lsl blink
-	brcs display_time_loop_blank
+	brcc display_time_loop_blank
 	rcall show_ascii
 	rcall show_segment
 	rjmp display_time_loop_continue
@@ -264,7 +270,7 @@ init_lcd:
 	rcall init_4bitmode
 	ldi arg, 0x28
 	rcall send_ins
-	ldi arg, 0x0E
+	ldi arg, 0x0C
 	rcall send_ins
 	ldi arg, 0x01
 	rcall send_ins
