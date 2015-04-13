@@ -152,58 +152,59 @@ loop_update_display:
 	rjmp loop
 
 
-
-
-
-
-
-
-
-
-
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;   Timer Interrupt  ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 timer1:
 	inc counter
 	com counter
 	and last_counter, counter
 	com counter
 	sbrc last_counter, 0
-	sbr int_flags, 1<<blink_flag
+	sbr int_flags, 1<<blink_flag 		; set the blink flag on counter = 0x?1 and 0x?3
 	sbrc last_counter, 1
-	sbr int_flags, 1<<counter_flag
+	sbr int_flags, 1<<counter_flag		; set the counter flag on counter = 0x?3
 	mov last_counter, counter
-	sbr int_flags, 1<<any_flag
+	sbr int_flags, 1<<any_flag			; set the any flag
 	reti
 
-update_number:
-	ld tmp, -Z
-	inc tmp
-	cp tmp, arg
-	clc
-	brne update_number_no_carry
-	clr tmp
-	sec
-update_number_no_carry:
-	st Z, tmp
-	ret
-	
 
-update_time:
-	push ZH
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;     Update Time    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+update_time: ; update current time with one second increase
+	push ZH								; store Z registers 
 	push ZL
-	ldi ZH, high(time+4)
+	ldi ZH, high(time+4)				; load Z with adress of time+ 4 bytes
 	ldi ZL, low(time+4)
-	ldi arg, 60
-	rcall update_number
-	brcc update_time_end
-	rcall update_number
-	brcc update_time_end
-	ldi arg, 24
+	ldi arg, 60							; load 60 for minutes/seconds comparison
+	rcall update_number					; update seconds
+	brcc update_time_end				; if carry cleared no minute update needed
+	rcall update_number					; update minutes
+	brcc update_time_end				; if carry cleared no hour update needed
+	ldi arg, 24							; load 24 for hour comparison
 	rcall update_number
 update_time_end:
-	sbr int_flags, 1<<update_display_flag
-	pop ZL
+	sbr int_flags, 1<<update_display_flag ;set update display flag since time is updated(inceased one second)
+	pop ZL								; return Z registers
 	pop ZH
-ret
+	ret
+
+
+update_number: ; time update helper function
+	ld tmp, -Z ; load second/minute/hour
+	inc tmp	   ; increase time
+	cp tmp, arg; compare time with 60 or 24
+	clc		   ; clear the carry
+	brne update_number_no_carry ; if time not equal with 60/24 no update needed
+	clr tmp ; if time is equal the next time step should be increased and this one cleared
+	sec		; set the carry to indicate that next step should be increased
+update_number_no_carry:
+	st Z, tmp ; store the new time
+	ret 
+
+
 
 display_time:
 	ld tmp, Z+
