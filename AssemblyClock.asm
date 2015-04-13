@@ -73,7 +73,7 @@
 	
 	ldi ZH, high(time)
 	ldi ZL, low(time)
-	ldi tmp, 3
+	ldi tmp, 2
 	st Z+, tmp
 	ldi tmp, 4
 	st Z+, tmp	;hours
@@ -179,6 +179,7 @@ display_time:
 	ld tmp, Z+
 	rcall delay_some_ms
 	push blink
+	push tmp
 	ldi arg, 0x80
 	rcall send_ins
 	rcall usart_send
@@ -206,7 +207,18 @@ display_time_loop_continue:
 	rcall show_char
 	rjmp display_time_loop
 display_time_loop_end:
-
+	pop arg
+	ldi tmp, 3
+	sub tmp, arg
+display_time_send_padding:
+	tst tmp
+	breq display_time_last_byte
+	dec tmp
+	ldi arg, 0x0
+	rcall usart_send
+	rcall usart_send
+	rjmp display_time_send_padding
+display_time_last_byte:
 	pop blink
 	ldi arg, 0b0110
 	push arg
@@ -439,6 +451,7 @@ create_character:
 	rcall show_char
 	ldi arg, 0x0
 	rcall show_char
+	
 	ldi arg, 0x80
 	rcall send_ins
 	pop arg
