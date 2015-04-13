@@ -67,15 +67,12 @@
 
 	rcall init_lcd		; init lcd
 
-
 	ldi tmp, high((freq/1024)/4)    ;Set timer compare to 250ms freq/prescaler/4
 	out OCR1AH, tmp
 	ldi tmp, low((freq/1024)/4)
 	out OCR1AL, tmp
-
 	ldi tmp, 1<<OCIE1A	; enable timer compare interrupt
 	out TIMSK, tmp
-
 	clr tmp				; clear timer counter
 	out TCNT1H, tmp
 	out TCNT1L, tmp
@@ -96,13 +93,10 @@
 	ldi tmp, 55
 	st Z+, tmp	;seconds
 	
-	ldi blink, 0x0 ;set blink register to none
-	
-	rcall create_character ; create alarm icon on LCD
-	
-	sei ; enable interrupt register
-
-	rcall alarm_clock_start ; start the clock
+	ldi blink, 0x0 				;set blink register to none
+	rcall create_character 		; create alarm icon on LCD
+	sei 						; enable interrupt register
+	rcall alarm_clock_start 	; start the clock
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -110,20 +104,20 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 loop:
 	sbrs int_flags, any_flag
-	rjmp loop						; jumps back to loop if no flags are set
-	cbr int_flags, 1<<any_flag		; clear any_flag
+	rjmp loop							; jumps back to loop if no flags are set
+	cbr int_flags, 1<<any_flag			; clear any_flag
 	
 	sbrs int_flags, counter_flag	
-	rjmp loop_blink					; skipped if counter flag is set
+	rjmp loop_blink						; skipped if counter flag is set
 	
-	rcall update_time				; update time
+	rcall update_time					; update time
 	
-	cbr int_flags, 1<<counter_flag	; clear counter_flag
+	cbr int_flags, 1<<counter_flag		; clear counter_flag
 
 
 loop_blink:
 	sbrs int_flags, blink_flag		
-	rjmp loop_update_display		; jumps to display update if blink is turned off
+	rjmp loop_update_display			; jumps to display update if blink is turned off
 	
 	mov tmp, blink					
 	swap tmp
@@ -133,15 +127,15 @@ loop_blink:
 	andi tmp, 0xF0
 	or blink, tmp
 	;ser blink
-	sbr int_flags, 1<<update_display_flag ; set update display flag
+	sbr int_flags,1<<update_display_flag; set update display flag
 	
-	cbr int_flags, 1<<blink_flag		  ; turn off blink flag
+	cbr int_flags, 1<<blink_flag		; turn off blink flag
 	
 
 
 loop_update_display:
 	sbrs int_flags, update_display_flag	  
-	rjmp loop							  ; jump back to loop if display update is turned off
+	rjmp loop							; jump back to loop if display update is turned off
 	
 	ldi ZH, high(time)
 	ldi ZL, low(time)
@@ -192,21 +186,21 @@ update_time_end:
 	ret
 
 
-update_number: ; time update helper function
-	ld tmp, -Z ; load second/minute/hour
-	inc tmp	   ; increase time
-	cp tmp, arg; compare time with 60 or 24
-	clc		   ; clear the carry
-	brne update_number_no_carry ; if time not equal with 60/24 no update needed
-	clr tmp ; if time is equal the next time step should be increased and this one cleared
-	sec		; set the carry to indicate that next step should be increased
+update_number: 							; time update helper function
+	ld tmp, -Z 							; load second/minute/hour
+	inc tmp	   							; increase time
+	cp tmp, arg							; compare time with 60 or 24
+	clc		   							; clear the carry
+	brne update_number_no_carry 		; if time not equal with 60/24 no update needed
+	clr tmp 							; if time is equal the next time step should be increased and this one cleared
+	sec									; set the carry to indicate that next step should be increased
 update_number_no_carry:
-	st Z, tmp ; store the new time
+	st Z, tmp 							; store the new time
 	ret 
 
 
 
-display_time:
+display_time:					
 	ld tmp, Z+
 	rcall delay_some_ms
 	push blink
