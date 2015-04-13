@@ -5,6 +5,7 @@
  .equ counter_flag = 0
  .equ blink_flag = 1
  .equ update_display_flag = 2
+ .equ any_flag = 7
  .equ LCD=PORTD
  .equ LCD_DD=DDRD
  .equ ENABLE=2
@@ -17,6 +18,9 @@
  .equ SECONDS_VISIBLE=BLINK_SECONDS+4
  .equ MINUTES_VISIBLE=BLINK_MINUTES+4
  .equ HOURS_VISIBLE=BLINK_HOURS+4
+ .equ ALARM_SHOW=0
+ .equ ALARM_ENABLED=1
+ .equ ALARM_TRIGGERED=2
 
  .def tmp = r16
  .def counter = r17
@@ -24,6 +28,8 @@
  .def arg=r19
  .def counter1=r20
  .def counter2=r21
+ .def last_counter=r22
+ .def alarm=r23
  .def blink=r25
 
  .dseg
@@ -67,7 +73,7 @@
 	
 	ldi ZH, high(time)
 	ldi ZL, low(time)
-	ldi tmp, 2
+	ldi tmp, 3
 	st Z+, tmp
 	ldi tmp, 4
 	st Z+, tmp	;hours
@@ -85,6 +91,10 @@
 	rcall alarm_clock_start
 
 loop:
+	sbrs int_flags, any_flag
+	rjmp loop
+	cbr int_flags, 1<<any_flag
+	
 	sbrs int_flags, counter_flag
 	rjmp loop_blink
 	
@@ -103,6 +113,7 @@ loop_blink:
 	com tmp
 	andi tmp, 0xF0
 	or blink, tmp
+	;ser blink
 	sbr int_flags, 1<<update_display_flag
 	
 	
@@ -121,18 +132,16 @@ loop_update_display:
 	rjmp loop
 
 timer1:
-	push tmp
-	in tmp, SREG
 	inc counter
-	sbrs counter, 0
+	com counter
+	and last_counter, counter
+	com counter
+	sbrc last_counter, 0
 	sbr int_flags, 1<<blink_flag
-	cpi counter, 4
-	brne end_timer1
+	sbrc last_counter, 1
 	sbr int_flags, 1<<counter_flag
-	clr counter
-end_timer1:
-	out SREG, tmp
-	pop tmp
+	mov last_counter, counter
+	sbr int_flags, 1<<any_flag
 	reti
 
 update_number:
@@ -174,38 +183,51 @@ display_time:
 	rcall send_ins
 	rcall usart_send
 display_time_loop:
+	dec tmp
 	ld arg, Z+
 	lsl blink
-	brcc display_time_loop_blank
-	rcall show_ascii
-	rcall show_segment
-	rjmp display_time_loop_continue
-display_time_loop_blank:
+	brcs display_time_loop_show
+	;show blank segment
 	ldi arg, ' '
 	rcall show_char
 	rcall show_char
-	clr arg
+	ldi arg, 0x0
 	rcall usart_send
 	rcall usart_send
+	rjmp display_time_loop_continue
+display_time_loop_show:
+	;show segment
+	rcall show_ascii
+	rcall show_segment
 display_time_loop_continue:
-	dec tmp
 	tst tmp
 	breq display_time_loop_end
 	ldi arg, ':'
 	rcall show_char
 	rjmp display_time_loop
 display_time_loop_end:
+
+	pop blink
+	ldi arg, 0b0110
+	push arg
+	ldi arg, 0x88
+	rcall send_ins
+	ldi arg, ' '
+	rcall show_char
+	pop arg
+	sbrs blink, ALARM_VISIBLE
+	rjmp display_time_no_alarm
+	sbrs alarm, ALARM_SHOW
+	rjmp display_time_no_alarm
+	sbr arg, 0b0001
+	push arg
 	ldi arg, 0x88
 	rcall send_ins
 	ldi arg, 0x0
-	sbrc blink, ALARM_VISIBLE
 	rcall show_char
-	pop blink
-	ldi arg, 0b0111
-	sbrc blink, ALARM_VISIBLE
-	cbr arg, 0b0001
+	pop arg
+display_time_no_alarm:
 	rcall usart_send
-	clt
 	ret
 
 init_usart:
@@ -423,5 +445,6 @@ create_character:
 	ret
 
 alarm_clock_start:
-	ldi blink, (1<<BLINK_HOURS)|(1<<BLINK_MINUTES)|(1<<BLINK_SECONDS)
+	ldi blink, (1<<BLINK_HOURS)|(1<<BLINK_MINUTES)|(1<<BLINK_SECONDS)|(1<<BLINK_ALARM)
+	ldi alarm, 1<<ALARM_SHOW
 	ret
