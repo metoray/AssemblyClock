@@ -5,6 +5,9 @@
  .equ counter_flag = 0
  .equ blink_flag = 1
  .equ update_display_flag = 2
+ .equ button_flag = 3
+ .equ button0_flag = 4
+ .equ button1_flag = 5
  .equ any_flag = 7
  .equ LCD=PORTD
  .equ LCD_DD=DDRD
@@ -30,6 +33,7 @@
  .def counter2=r21
  .def last_counter=r22
  .def alarm=r23
+ .def buttons=r24
  .def blink=r25
 
  .dseg
@@ -104,7 +108,7 @@ loop:
 
 loop_blink:
 	sbrs int_flags, blink_flag
-	rjmp loop_update_display
+	rjmp loop_check_buttons
 	
 	mov tmp, blink
 	swap tmp
@@ -116,8 +120,15 @@ loop_blink:
 	;ser blink
 	sbr int_flags, 1<<update_display_flag
 	
-	
 	cbr int_flags, 1<<blink_flag
+	
+loop_check_buttons:
+	sbrs int_flags, button_flag
+	rjmp loop_update_display
+	
+	; do button stuff here
+	
+	cbr int_flags, 1<<button_flag
 	
 loop_update_display:
 	sbrs int_flags, update_display_flag
