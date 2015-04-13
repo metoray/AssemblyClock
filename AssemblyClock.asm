@@ -1,27 +1,36 @@
  .include "m32def.inc"
  .equ FREQ = 11059200 ; frequency in hertz
- .equ USART_BAUDRATE=19200
- .equ BAUD_PRESCALE=(((FREQ / (USART_BAUDRATE * 16))) - 1)
- .equ counter_flag = 0
- .equ blink_flag = 1
- .equ update_display_flag = 2
- .equ any_flag = 7
+ .equ USART_BAUDRATE=19200 ; Baud rate for serial communication
+ .equ BAUD_PRESCALE=(((FREQ / (USART_BAUDRATE * 16))) - 1) ;  prescaler based on freq
+ 
+ ; values for the flags register
+ .equ counter_flag = 0 ; 
+ .equ blink_flag = 1 ; 
+ .equ update_display_flag = 2 ; 
+ .equ any_flag = 7 ; enabled when interrupt happens
+ 
+ ;Ports
  .equ LCD=PORTD
  .equ LCD_DD=DDRD
  .equ ENABLE=2
  .equ RS=3
- .equ BLINK_ALARM=0
+
+ ;Blink flags
+ .equ BLINK_ALARM=0						;does it have to blink bits
  .equ BLINK_SECONDS=1
  .equ BLINK_MINUTES=2
  .equ BLINK_HOURS=3
- .equ ALARM_VISIBLE=BLINK_ALARM+4
+ .equ ALARM_VISIBLE=BLINK_ALARM+4		;if it blinks, is it visible or turned off bits
  .equ SECONDS_VISIBLE=BLINK_SECONDS+4
  .equ MINUTES_VISIBLE=BLINK_MINUTES+4
  .equ HOURS_VISIBLE=BLINK_HOURS+4
+
+ ;Alarm flags
  .equ ALARM_SHOW=0
  .equ ALARM_ENABLED=1
  .equ ALARM_TRIGGERED=2
 
+;Defined registers
  .def tmp = r16
  .def counter = r17
  .def int_flags = r18
@@ -32,14 +41,17 @@
  .def alarm=r23
  .def blink=r25
 
+;Time in RAM
  .dseg
  time: .byte 4
 
  .cseg
 
+;Code start at reset vector 0x00
  .org 0x0
  rjmp main
 
+;Timer 1 Interrupt
  .org OC1Aaddr
  rjmp timer1
 
@@ -55,7 +67,8 @@
 
 	rcall init_lcd		; init lcd
 
-	ldi tmp, high((freq/1024)/4)
+
+	ldi tmp, high((freq/1024)/4)    ;Set timer compare to 250ms freq/prescaler/4
 	out OCR1AH, tmp
 	ldi tmp, low((freq/1024)/4)
 	out OCR1AL, tmp
@@ -63,18 +76,19 @@
 	ldi tmp, 1<<OCIE1A	; enable timer compare interrupt
 	out TIMSK, tmp
 
-	clr tmp
+	clr tmp				; clear timer counter
 	out TCNT1H, tmp
 	out TCNT1L, tmp
 	
 	rcall init_usart	; init serial communication
 	
-	clr counter
+	clr counter			; clear counter
 	
-	ldi ZH, high(time)
+	ldi ZH, high(time)	;point Z reg to time in RAM
 	ldi ZL, low(time)
-	ldi tmp, 2
-	st Z+, tmp
+	
+	ldi tmp, 2  
+	st Z+, tmp  ;amount of time segments
 	ldi tmp, 4
 	st Z+, tmp	;hours
 	ldi tmp, 59
@@ -82,31 +96,36 @@
 	ldi tmp, 55
 	st Z+, tmp	;seconds
 	
-	ldi blink, 0x0
+	ldi blink, 0x0 ;set blink register to none
 	
-	rcall create_character
+	rcall create_character ; create alarm icon on LCD
 	
-	sei
-	
-	rcall alarm_clock_start
+	sei ; enable interrupt register
 
+	rcall alarm_clock_start ; start the clock
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;      Main Loop     ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 loop:
 	sbrs int_flags, any_flag
-	rjmp loop
-	cbr int_flags, 1<<any_flag
+	rjmp loop						; jumps back to loop if no flags are set
+	cbr int_flags, 1<<any_flag		; clear any_flag
 	
-	sbrs int_flags, counter_flag
-	rjmp loop_blink
+	sbrs int_flags, counter_flag	
+	rjmp loop_blink					; skipped if counter flag is set
 	
-	rcall update_time
+	rcall update_time				; update time
 	
-	cbr int_flags, 1<<counter_flag
+	cbr int_flags, 1<<counter_flag	; clear counter_flag
+
 
 loop_blink:
-	sbrs int_flags, blink_flag
-	rjmp loop_update_display
+	sbrs int_flags, blink_flag		
+	rjmp loop_update_display		; jumps to display update if blink is turned off
 	
-	mov tmp, blink
+	mov tmp, blink					
 	swap tmp
 	andi tmp, 0xF0
 	eor blink, tmp
@@ -114,14 +133,15 @@ loop_blink:
 	andi tmp, 0xF0
 	or blink, tmp
 	;ser blink
-	sbr int_flags, 1<<update_display_flag
+	sbr int_flags, 1<<update_display_flag ; set update display flag
 	
+	cbr int_flags, 1<<blink_flag		  ; turn off blink flag
 	
-	cbr int_flags, 1<<blink_flag
-	
+
+
 loop_update_display:
-	sbrs int_flags, update_display_flag
-	rjmp loop
+	sbrs int_flags, update_display_flag	  
+	rjmp loop							  ; jump back to loop if display update is turned off
 	
 	ldi ZH, high(time)
 	ldi ZL, low(time)
@@ -130,6 +150,16 @@ loop_update_display:
 	cbr int_flags, 1<<update_display_flag
 	
 	rjmp loop
+
+
+
+
+
+
+
+
+
+
 
 timer1:
 	inc counter
@@ -433,7 +463,7 @@ end_tens:
 	pop arg
 	ret
 	
-create_character:
+create_character: ; create alarm icon on LCD
 	push arg
 	ldi arg, 0x40
 	rcall send_ins
