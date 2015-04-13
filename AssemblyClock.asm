@@ -27,7 +27,7 @@
  .def blink=r25
 
  .dseg
- time: .byte 3
+ time: .byte 4
 
  .cseg
 
@@ -67,6 +67,8 @@
 	
 	ldi ZH, high(time)
 	ldi ZL, low(time)
+	ldi tmp, 2
+	st Z+, tmp
 	ldi tmp, 4
 	st Z+, tmp	;hours
 	ldi tmp, 59
@@ -80,6 +82,7 @@
 	
 	sei
 	
+	rcall alarm_clock_start
 
 loop:
 	sbrs int_flags, counter_flag
@@ -109,6 +112,8 @@ loop_update_display:
 	sbrs int_flags, update_display_flag
 	rjmp loop
 	
+	ldi ZH, high(time)
+	ldi ZL, low(time)
 	rcall display_time
 	
 	cbr int_flags, 1<<update_display_flag
@@ -144,8 +149,10 @@ update_number_no_carry:
 	
 
 update_time:
-	ldi ZH, high(time+3)
-	ldi ZL, low(time+3)
+	push ZH
+	push ZL
+	ldi ZH, high(time+4)
+	ldi ZL, low(time+4)
 	ldi arg, 60
 	rcall update_number
 	brcc update_time_end
@@ -155,17 +162,17 @@ update_time:
 	rcall update_number
 update_time_end:
 	sbr int_flags, 1<<update_display_flag
+	pop ZL
+	pop ZH
 ret
 
 display_time:
+	ld tmp, Z+
 	rcall delay_some_ms
 	push blink
-	ldi ZH, high(time)
-	ldi ZL, low(time)
 	ldi arg, 0x80
 	rcall send_ins
 	rcall usart_send
-	ldi tmp, 3
 display_time_loop:
 	ld arg, Z+
 	lsl blink
@@ -188,6 +195,8 @@ display_time_loop_continue:
 	rcall show_char
 	rjmp display_time_loop
 display_time_loop_end:
+	ldi arg, 0x88
+	rcall send_ins
 	ldi arg, 0x0
 	sbrc blink, ALARM_VISIBLE
 	rcall show_char
@@ -411,4 +420,8 @@ create_character:
 	ldi arg, 0x80
 	rcall send_ins
 	pop arg
+	ret
+
+alarm_clock_start:
+	ldi blink, (1<<BLINK_HOURS)|(1<<BLINK_MINUTES)|(1<<BLINK_SECONDS)
 	ret
