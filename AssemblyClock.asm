@@ -232,6 +232,7 @@ loop_test_buttons1:
 	sbrc settings, settings_on			; check if we are in settings
 	rjmp loop_settings					; if so, jump to settings
 	sbr settings, 1<<settings_on		; if we are not in settings set register flag for settings
+	sbr settings, 1<<settings_hours
 
 	cbr int_flags, 1<<button1_flag
 
