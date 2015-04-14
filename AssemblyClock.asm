@@ -58,10 +58,15 @@
 	out TCCR1B, tmp
 
 	rcall init_lcd		; init lcd
+	
+	clr tmp
+	out DDRA, tmp
+	ser tmp
+	out DDRB, tmp	;debug leds
 
-	ldi tmp, high((freq/1024)/4)
+	ldi tmp, high((freq/1024)/16)
 	out OCR1AH, tmp
-	ldi tmp, low((freq/1024)/4)
+	ldi tmp, low((freq/1024)/16)
 	out OCR1AL, tmp
 
 	ldi tmp, 1<<OCIE1A	; enable timer compare interrupt
@@ -77,7 +82,7 @@
 	
 	ldi ZH, high(time)
 	ldi ZL, low(time)
-	ldi tmp, 2
+	ldi tmp, 3
 	st Z+, tmp
 	ldi tmp, 4
 	st Z+, tmp	;hours
@@ -117,18 +122,70 @@ loop_blink:
 	com tmp
 	andi tmp, 0xF0
 	or blink, tmp
-	;ser blink
+	ser blink
 	sbr int_flags, 1<<update_display_flag
 	
 	cbr int_flags, 1<<blink_flag
 	
 loop_check_buttons:
 	sbrs int_flags, button_flag
-	rjmp loop_update_display
+	rjmp loop_test_buttons
 	
-	; do button stuff here
+	in arg, PINA
+	clr tmp
+	
+	push buttons
+	andi buttons, 0xF
+	inc buttons
+	sbrc buttons, 3
+	ldi buttons, 2
+	sbrc arg, 0
+	clr buttons
+	or tmp, buttons
+	swap tmp
+	cpi buttons, 2
+	brne next_button
+	sbr int_flags, 1<<button0_flag
+	
+next_button:
+	pop buttons
+	swap buttons
+	andi buttons, 0xF
+	inc buttons
+	sbrc buttons, 3
+	ldi buttons, 2
+	sbrc arg, 1
+	clr buttons
+	or tmp, buttons
+	swap tmp
+	cpi buttons, 2
+	brne end_button
+	sbr int_flags, 1<<button1_flag
+	
+end_button:
+	mov buttons, tmp
+	
+	mov arg, int_flags
+	com arg
+	out PORTB, arg
 	
 	cbr int_flags, 1<<button_flag
+	
+loop_test_buttons:
+	sbrs int_flags, button0_flag
+	rjmp loop_test_buttons1
+	
+	ldi tmp, 1<<ALARM_SHOW
+	eor alarm, tmp
+	sbr int_flags, 1<<update_display_flag
+
+	cbr int_flags, 1<<button0_flag
+	
+loop_test_buttons1:
+	sbrs int_flags, button1_flag
+	rjmp loop_update_display
+	
+	cbr int_flags, 1<<button1_flag
 	
 loop_update_display:
 	sbrs int_flags, update_display_flag
@@ -147,9 +204,10 @@ timer1:
 	com counter
 	and last_counter, counter
 	com counter
-	sbrc last_counter, 0
+	sbr int_flags, 1<<button_flag
+	sbrc last_counter, 2
 	sbr int_flags, 1<<blink_flag
-	sbrc last_counter, 1
+	sbrc last_counter, 3
 	sbr int_flags, 1<<counter_flag
 	mov last_counter, counter
 	sbr int_flags, 1<<any_flag
