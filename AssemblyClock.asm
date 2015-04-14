@@ -116,14 +116,18 @@
 	rcall create_character 		; create alarm icon on LCD
 	sei 						; enable interrupt register
 	rcall alarm_clock_start 	; start the clock
+	clr settings
+	clr buttons
 	rjmp loop					; jump to Main Loop
+
+	
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;   Start routines   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 	alarm_clock_start:
-	ldi blink, (1<<BLINK_HOURS)|(1<<BLINK_MINUTES)|(1<<BLINK_SECONDS)|(1<<BLINK_ALARM)
+	ldi blink, (1<<BLINK_HOURS)|(1<<BLINK_MINUTES)|(1<<BLINK_SECONDS)
 	ldi alarm, 1<<ALARM_SHOW
 	ret
 
@@ -215,7 +219,7 @@ loop_test_buttons:
 	
 	sbrc settings, settings_on
 	rjmp loop_test_buttons1				; check if we are in settings, if so, jump to next button
-	ldi tmp, (1<<ALARM_SHOW|1<<ALARM_ENABLED)
+	ldi tmp, (1<<ALARM_SHOW)|(1<<ALARM_ENABLED)
 	eor alarm, tmp
 	sbr int_flags, 1<<update_display_flag
 
@@ -239,23 +243,33 @@ loop_settings:
 
 	sbrs int_flags, button1_flag		; check if button 1 is pressed
 	rjmp loop_settings_button0			; if not, jump to button0
-
+	cbr int_flags, 1<<button1_flag		; if so, clear button flag
 	cbr settings, 1<<settings_on		; remove settings label
 	lsl settings						; move settings one position
-	sbrc settings_on, 1<<settings_done	
+	sbrc settings, settings_done	
 	rjmp loop_settings_done				; if settings_done is set we are done so jump to there
 	sbr settings, 1<<settings_on		; else we are still in settings
+	rjmp loop_settings_update
 
 loop_settings_button0:
 	
 	sbrs int_flags, button1_flag		; check if button 0 is pressed
-	rjmp loop_update_display			; if not, jump to update_display
-	
+	rjmp loop_settings_update			; if not, jump to update_display
+	cbr int_flags, 1<<button0_flag
 
-
-
-loop_settings_done
+loop_settings_done:
+	rcall settings_update_done
 	clr settings
+	rjmp loop_update_display
+
+loop_settings_update:					;check in what state we are and update display/blink variables
+	sbrc settings, settings_hours
+	rcall settings_update_hours
+	sbrc settings, settings_minutes
+	rcall settings_update_minutes
+	sbrc settings, settings_seconds
+	rcall settings_update_seconds
+
 
 
 
@@ -271,7 +285,26 @@ loop_update_display:
 	
 	rjmp loop
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;   Settings helper  ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
+settings_update_hours:
+		ldi blink, (1<<BLINK_HOURS)
+		cbr alarm, 1<<ALARM_SHOW
+		ret
+
+settings_update_minutes:
+		ldi blink, (1<<BLINK_MINUTES)
+		ret
+
+settings_update_seconds:
+		ldi blink, (1<<BLINK_SECONDS)
+		ret
+settings_update_done:
+		clr blink
+		sbr alarm, 1<<ALARM_SHOW
+		ret
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;   Timer Interrupt  ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
