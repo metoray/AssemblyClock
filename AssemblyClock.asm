@@ -506,6 +506,8 @@ display_time_send_padding:
 display_time_last_byte:
 	pop blink							; pop blink register
 	ldi arg, 0b0110						; MULTI: load last byte
+	sbrc alarm, ALARM_TRIGGERED			; set alarm bit in last byte if alarm was triggered
+	sbr arg, 1<<3
 	push arg							; MULTI: push last byte
 	ldi arg, 0x88						; LCD: set cursor on alarm position
 	rcall send_ins
