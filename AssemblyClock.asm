@@ -4,13 +4,13 @@
  .equ BAUD_PRESCALE=(((FREQ / (USART_BAUDRATE * 16))) - 1) ;  prescaler based on freq
 
  ; values for the flags register
- .equ counter_flag = 0 ; 
- .equ blink_flag = 1 ; 
- .equ update_display_flag = 2 ; 
- .equ button_flag = 3 ; enabled when buttons should be checked
- .equ button0_flag = 4 ; enabled if button 0 was pressed
- .equ button1_flag = 5 ; enabled if button 1 was pressed
- .equ any_flag = 7 ; enabled when interrupt happens
+ .equ counter_flag = 0 					; 
+ .equ blink_flag = 1 					; 
+ .equ update_display_flag = 2 			; 
+ .equ button_flag = 3 					; enabled when buttons should be checked
+ .equ button0_flag = 4 					; enabled if button 0 was pressed
+ .equ button1_flag = 5 					; enabled if button 1 was pressed
+ .equ any_flag = 7 						; enabled when interrupt happens
  
  ;Ports
  .equ LCD=PORTD
@@ -34,16 +34,16 @@
  .equ ALARM_TRIGGERED=2
 
 ;Defined registers
- .def tmp = r16
- .def counter = r17
- .def int_flags = r18
- .def arg=r19
- .def counter1=r20
- .def counter2=r21
- .def last_counter=r22
- .def alarm=r23
- .def buttons=r24
- .def blink=r25
+ .def tmp = r16							; we all need more temporary registers...
+ .def counter = r17						; counter
+ .def int_flags = r18 					; global status flags
+ .def arg=r19							; argument register for calling subroutines
+ .def counter1=r20						; counter
+ .def counter2=r21						; counter
+ .def last_counter=r22					; damnit, even more counters
+ .def alarm=r23							; alarm status register
+ .def buttons=r24						; button counters
+ .def blink=r25							; blink status register
 
 ;Time in RAM
  .dseg
@@ -61,7 +61,7 @@
 
 
  main:
-	ldi tmp, low(RAMEND)	; reset stack pointer
+	ldi tmp, low(RAMEND)			; reset stack pointer
 	out SPL, tmp
 	ldi tmp, high(RAMEND)
 	out SPH, tmp
@@ -69,37 +69,37 @@
 	ldi tmp, (1<<CTC1) | (1<<CS12) | (1<<CS10) | (1<<WGM12)	; enable timer with prescaler 1024
 	out TCCR1B, tmp
 
-	rcall init_lcd		; init lcd
+	rcall init_lcd					; init lcd
 	
 	clr tmp
 	out DDRA, tmp
 	ser tmp
-	out DDRB, tmp	;debug leds
+	out DDRB, tmp					;debug leds
 
-	ldi tmp, high((freq/1024)/16)    ;Set timer compare to 250ms freq/prescaler/16
+	ldi tmp, high((freq/1024)/16)   ;Set timer compare to 250ms freq/prescaler/16
 	out OCR1AH, tmp
 	ldi tmp, low((freq/1024)/16)
 	out OCR1AL, tmp
-	ldi tmp, 1<<OCIE1A	; enable timer compare interrupt
+	ldi tmp, 1<<OCIE1A				; enable timer compare interrupt
 	out TIMSK, tmp
-	clr tmp				; clear timer counter
+	clr tmp							; clear timer counter
 	out TCNT1H, tmp
 	out TCNT1L, tmp
 	
-	rcall init_usart	; init serial communication
+	rcall init_usart		; init serial communication
 	
-	clr counter			; clear counter
+	clr counter				; clear counter
 	
-	ldi ZH, high(time)	;point Z reg to time in RAM
+	ldi ZH, high(time)		;point Z reg to time in RAM
 	ldi ZL, low(time)
 	ldi tmp, 3  
-	st Z+, tmp  ;amount of time segments
+	st Z+, tmp  			;amount of time segments
 	ldi tmp, 4
-	st Z+, tmp	;hours
+	st Z+, tmp				;hours
 	ldi tmp, 59
-	st Z+, tmp	;minutes
+	st Z+, tmp				;minutes
 	ldi tmp, 55
-	st Z+, tmp	;seconds
+	st Z+, tmp				;seconds
 	
 	ldi blink, 0x0 				;set blink register to none
 	rcall create_character 		; create alarm icon on LCD
@@ -135,66 +135,66 @@ loop:
 
 loop_blink:
 	sbrs int_flags, blink_flag		
-	rjmp loop_check_buttons			; jumps to display update if blink is turned off
-	
-	mov tmp, blink					
-	swap tmp
-	andi tmp, 0xF0
-	eor blink, tmp
-	com tmp
-	andi tmp, 0xF0
-	or blink, tmp
+	rjmp loop_check_buttons				; jumps to check buttons if blink is turned off
+										; invert blink flags, turn off and on
+	mov tmp, blink						; copy blink
+	swap tmp							; swap nibbles
+	andi tmp, 0xF0						; keep blink conditional
+	eor blink, tmp						; turn on or off what has to blink
+	com tmp								; invert blink
+	andi tmp, 0xF0						; remove lower bits
+	or blink, tmp						; update blink register with updated status
 	sbr int_flags,1<<update_display_flag; set update display flag
 	
 	cbr int_flags, 1<<blink_flag		; turn off blink flag
 	
 loop_check_buttons:
-	sbrs int_flags, button_flag
-	rjmp loop_test_buttons
+	sbrs int_flags, button_flag			
+	rjmp loop_test_buttons				; jump to loop_test_buttons if check buttons is turned off
 	
-	in arg, PINA
-	clr tmp
+	in arg, PINA						; read pinA
+	clr tmp								; clear tmp
 	
-	push buttons
-	andi buttons, 0xF
-	inc buttons
-	sbrc buttons, 3
-	ldi buttons, 2
-	sbrc arg, 0
-	clr buttons
-	or tmp, buttons
-	swap tmp
-	cpi buttons, 2
-	brne next_button
-	sbr int_flags, 1<<button0_flag
-	
+	push buttons						; save button register
+	andi buttons, 0xF					; keep lower bits
+	inc buttons							; increase buttons
+	sbrc buttons, 3						; check if buttons is 8
+	ldi buttons, 2						; if so, load 2
+	sbrc arg, 0							; check if pinA0 is low(button pressed)
+	clr buttons							; if not: reset to 0
+	or tmp, buttons						; save lower counter in tmp
+	swap tmp	
+	cpi buttons, 2						; compare buttons with two
+	brne next_button					; if not equal go to next_button
+	sbr int_flags, 1<<button0_flag		; else set button0_flag
+		
 next_button:
-	pop buttons
-	swap buttons
-	andi buttons, 0xF
-	inc buttons
-	sbrc buttons, 3
-	ldi buttons, 2
-	sbrc arg, 1
-	clr buttons
-	or tmp, buttons
-	swap tmp
-	cpi buttons, 2
-	brne end_button
-	sbr int_flags, 1<<button1_flag
+	pop buttons							; restore button register
+	swap buttons						; swap nibbles
+	andi buttons, 0xF					; keep higher bits
+	inc buttons							; increase higher counter
+	sbrc buttons, 3						; check if higher counter is 8
+	ldi buttons, 2						; if so, load 2
+	sbrc arg, 1							; check if pinA1 is low(button pressed)
+	clr buttons							; is not, reset to 0
+	or tmp, buttons						; combine higher and lower counters
+	swap tmp							; restore higher/lower counter order
+	cpi buttons, 2						; check if higher counter is equal to 2
+	brne end_button						; if not, end
+	sbr int_flags, 1<<button1_flag		; else set button1_flag
 	
-end_button:
-	mov buttons, tmp
+end_button:								
+	mov buttons, tmp					; move tmp back to buttons, restoring
 	
-	mov arg, int_flags
-	com arg
-	out PORTB, arg
+	mov arg, int_flags					; store int_flags
+	com arg								; invert flags
+	out PORTB, arg						; push to output
 	
-	cbr int_flags, 1<<button_flag
+	cbr int_flags, 1<<button_flag		; clear check_button flag
 	
 loop_test_buttons:
 	sbrs int_flags, button0_flag
-	rjmp loop_test_buttons1
+	rjmp loop_test_buttons1				; check if button 0 was pressed, if not, jump to button 1
 	
 	ldi tmp, 1<<ALARM_SHOW
 	eor alarm, tmp
@@ -204,7 +204,7 @@ loop_test_buttons:
 	
 loop_test_buttons1:
 	sbrs int_flags, button1_flag
-	rjmp loop_update_display
+	rjmp loop_update_display			; check if button 1 was pressed, if not jump to display update
 	
 	cbr int_flags, 1<<button1_flag
 	
