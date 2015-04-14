@@ -12,6 +12,16 @@
  .equ button1_flag = 5 					; enabled if button 1 was pressed
  .equ any_flag = 7 						; enabled when interrupt happens
  
+; values for the settings register
+.equ settings_on = 0					; are we currently setting the time?
+.equ settings_hours = 1					; setting the hours
+.equ settings_minutes = 2				; setting the minutes
+.equ settings_seconds = 3				; setting the seconds
+.equ settings_alarm_hours = 4			; setting the alarm hours
+.equ settings_alarm_minutes = 5			; setting the alarm minutes
+.equ settings_alarm_status = 6			; setting alarm on/off
+.equ settings_done = 7					; setting is done
+
  ;Ports
  .equ LCD=PORTD
  .equ LCD_DD=DDRD
@@ -44,6 +54,7 @@
  .def alarm=r23							; alarm status register
  .def buttons=r24						; button counters
  .def blink=r25							; blink status register
+ .def settings=r26						; settings status register
 
 ;Time in RAM
  .dseg
@@ -128,9 +139,11 @@ loop:
 	sbrs int_flags, counter_flag	
 	rjmp loop_blink						; skipped if counter flag is set
 	
+	sbrs settings, settings_on			; skip update time if we are setting time
 	rcall update_time					; update time
 	
 	cbr int_flags, 1<<counter_flag		; clear counter_flag
+
 
 
 loop_blink:
@@ -148,6 +161,8 @@ loop_blink:
 	
 	cbr int_flags, 1<<blink_flag		; turn off blink flag
 	
+
+
 loop_check_buttons:
 	sbrs int_flags, button_flag			
 	rjmp loop_test_buttons				; jump to loop_test_buttons if check buttons is turned off
@@ -191,12 +206,16 @@ end_button:
 	out PORTB, arg						; push to output
 	
 	cbr int_flags, 1<<button_flag		; clear check_button flag
-	
+
+
+
 loop_test_buttons:
 	sbrs int_flags, button0_flag
 	rjmp loop_test_buttons1				; check if button 0 was pressed, if not, jump to button 1
 	
-	ldi tmp, 1<<ALARM_SHOW
+	sbrc settings, settings_on
+	rjmp loop_test_buttons1				; check if we are in settings, if so, jump to next button
+	ldi tmp, (1<<ALARM_SHOW|1<<ALARM_ENABLED)
 	eor alarm, tmp
 	sbr int_flags, 1<<update_display_flag
 
@@ -204,10 +223,42 @@ loop_test_buttons:
 	
 loop_test_buttons1:
 	sbrs int_flags, button1_flag
-	rjmp loop_update_display			; check if button 1 was pressed, if not jump to display update
+	rjmp loop_update_display			; check if button 1 was pressed, if not jump to loop_update_display
 	
+	sbrc settings, settings_on			; check if we are in settings
+	rjmp loop_settings					; if so, jump to settings
+	sbr settings, 1<<settings_on		; if we are not in settings set register flag for settings
+
 	cbr int_flags, 1<<button1_flag
+
+
+
+loop_settings:
+	sbrs settings, settings_on
+	rjmp loop_update_display			; check if we are in settings, if not, jump to update display
+
+	sbrs int_flags, button1_flag		; check if button 1 is pressed
+	rjmp loop_settings_button0			; if not, jump to button0
+
+	cbr settings, 1<<settings_on		; remove settings label
+	lsl settings						; move settings one position
+	sbrc settings_on, 1<<settings_done	
+	rjmp loop_settings_done				; if settings_done is set we are done so jump to there
+	sbr settings, 1<<settings_on		; else we are still in settings
+
+loop_settings_button0:
 	
+	sbrs int_flags, button1_flag		; check if button 0 is pressed
+	rjmp loop_update_display			; if not, jump to update_display
+	
+
+
+
+loop_settings_done
+	clr settings
+
+
+
 loop_update_display:
 	sbrs int_flags, update_display_flag	  
 	rjmp loop							; jump back to loop if display update is turned off
