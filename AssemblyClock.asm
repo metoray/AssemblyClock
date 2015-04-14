@@ -97,7 +97,16 @@
 	rcall create_character 		; create alarm icon on LCD
 	sei 						; enable interrupt register
 	rcall alarm_clock_start 	; start the clock
+	rjmp loop					; jump to Main Loop
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;   Start routines   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+	alarm_clock_start:
+	ldi blink, (1<<BLINK_HOURS)|(1<<BLINK_MINUTES)|(1<<BLINK_SECONDS)|(1<<BLINK_ALARM)
+	ldi alarm, 1<<ALARM_SHOW
+	ret
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -279,35 +288,6 @@ display_time_no_alarm:
 
 
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;   USART routines   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
-init_usart:
-	ldi tmp, (1 << RXEN) | (1 << TXEN) 	; set send and receive bit
-	out UCSRB, tmp
-
-	ldi tmp, (1 << URSEL) | (1 << UCSZ0) | (1 << UCSZ1)
-	out UCSRC, tmp						; set frame format
-
-	ldi tmp, high(BAUD_PRESCALE)		; set baud rate
-	out UBRRH, tmp					
-	ldi tmp, low(BAUD_PRESCALE)
-	out UBRRL, tmp
-	ret
-	
-usart_recv:								; check if receive bit is set
-	sbis UCSRA, RXC
-	rjmp usart_recv						; if not jump back
-	in arg, UDR							; read data
-	ret								
-	
-usart_send:
-	sbis UCSRA, UDRE					; check if data register is empty
-	rjmp usart_send						; if not wait till empty
-	out UDR, arg						; fill data register
-	ret
-
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;   Multisegment Routines   ;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -338,7 +318,7 @@ show_segment:
 	push arg							; store timesegment
 	push tmp							; store tmp
 	clr tmp								; empty tmp
-seg_tens:
+seg_tens:								; TODO: BAD: twice tenssegmenting (see twice tenssegmenting)
 	cpi arg, 10							; compare timesegment with 10
 	brlo seg_end_tens					; if lower branch
 	inc tmp								; else: increase tens
@@ -357,17 +337,125 @@ seg_end_tens:
 	pop arg								; restore timesegment
 	ret
 
+
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;    LCD routines   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+send_ins:
+	push arg							; store instruction
+	push arg							; once more
+	andi arg, 0xF0						; AND first four bits for four bit mode
+	out LCD, arg						; send first four bits
+	rcall clock_in						; set output enabled
+	pop arg								; load instruction
+	swap arg							; swap nibbles
+	andi arg, 0xF0						; AND last four bits 
+	out LCD, arg						; send last four bits
+	rcall clock_in						; set output enabled
+	rcall delay_some_ms					; wait for display to get ready
+	pop arg								; restore instruction
+	ret
+	
+show_char:
+	push arg							; store character
+	push arg							; once more
+	andi arg, 0xf0   					; AND first four bits for four bit mode
+	sbr arg, (1 << RS)					; set register select to indicate data transfer
+	out LCD, arg						; send first four bits
+	rcall clock_in						; set output enabled
+	pop arg								; load instruction
+	swap arg							; swap nibbles
+	andi arg, 0xf0						; AND last four bits 
+	sbr arg, (1 << RS)					; set register select to indicate data transfer
+	out LCD, arg						; send last four bits
+	rcall clock_in						; set output enabled
+	pop arg								; restore instruction
+	ret
+
+clock_in:
+	cbi LCD, ENABLE						; clear enable bit, disable transfer
+	sbi LCD, ENABLE						; set enable bit, enable transfer
+	rcall delay_one_ish_ms				; some delay to finish transfer
+	cbi LCD, ENABLE						; clear enable bit, disable transfer
+	ret
+
+show_ascii:
+	push arg							; save timesegment
+	push tmp							; save tmp
+	clr tmp
+tens:									; TODO: BAD: twice tenssegmenting (see twice tenssegmenting)
+	cpi arg, 10
+	brlo end_tens
+	inc tmp
+	subi arg, 10
+	rjmp tens
+
+end_tens:
+	subi tmp, -48						; add 48 to tens to create ascii char
+	push arg							; save ones
+	mov arg, tmp						; move tens to arg
+	rcall show_char						; display tens
+	pop arg								; restore ones
+	subi arg, -48						; add 48 to ones to create ascii char
+	rcall show_char						; display ones
+	pop tmp								; restore tmp
+	pop arg								; restore timesegment
+	ret
+
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;   USART routines   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+init_usart:
+	ldi tmp, (1 << RXEN) | (1 << TXEN) 	; set send and receive bit
+	out UCSRB, tmp
+
+	ldi tmp, (1 << URSEL) | (1 << UCSZ0) | (1 << UCSZ1)
+	out UCSRC, tmp						; set frame format
+
+	ldi tmp, high(BAUD_PRESCALE)		; set baud rate
+	out UBRRH, tmp					
+	ldi tmp, low(BAUD_PRESCALE)
+	out UBRRL, tmp
+	ret
+	
+usart_recv:								; check if receive bit is set
+	sbis UCSRA, RXC
+	rjmp usart_recv						; if not jump back
+	in arg, UDR							; read data
+	ret								
+	
+usart_send:
+	sbis UCSRA, UDRE					; check if data register is empty
+	rjmp usart_send						; if not wait till empty
+	out UDR, arg						; fill data register
+	ret
+
+
+
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;      Init LCD     ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
 init_lcd:
-	rcall delay_some_ms ; wait for display to be ready
+	rcall delay_some_ms 				; wait for display to be ready
 	rcall delay_some_ms
 	rcall delay_some_ms
 
-	clr tmp				; set display as output
+	clr tmp								; set display as output
 	out LCD, tmp
 	ser tmp
 	out LCD_DD, tmp
 	
 	rcall init_4bitmode
+
 	ldi arg, 0x2C
 	rcall send_ins
 	ldi arg, 0x0C
@@ -396,92 +484,8 @@ init_4bitmode:
 	rcall clock_in
 	rcall delay_some_ms
 	ret
-	
-send_ins:
-	push arg
-	push arg
-	andi arg, 0xF0
-	out LCD, arg
-	rcall clock_in
-	pop arg
-	swap arg
-	andi arg, 0xF0
-	out LCD, arg
-	rcall clock_in
-	rcall delay_some_ms
-	pop arg
-	ret
-	
-show_char:
-	push arg
-	push arg
-	andi arg, 0xf0   
-	sbr arg, (1 << RS)
-	out LCD, arg
-	rcall clock_in
-	pop arg
-	swap arg
-	andi arg, 0xf0
-	sbr arg, (1 << RS)
-	out LCD, arg
-	rcall clock_in
-	pop arg
-	ret
-	
-	
-clock_in:
-	cbi LCD, ENABLE
-	sbi LCD, ENABLE
-	rcall delay_one_ish_ms
-	cbi LCD, ENABLE
-	ret
 
-delay_some_ms:
-	clr counter1
-delay_1:
-	clr counter2
-delay_2:
-	dec counter2
-	brne delay_2
-	dec counter1
-	brne delay_1
-	ret
-
-delay_one_ish_ms:
-	ldi counter1, 40
-delay_one_1:
-	clr counter2
-delay_one_2:
-	dec counter2
-	brne delay_one_2
-	dec counter1
-	brne delay_1
-	ret
-
-show_ascii:
-	push arg
-	push tmp
-	clr tmp
-tens:
-	cpi arg, 10
-	brlo end_tens
-	inc tmp
-	subi arg, 10
-	rjmp tens
-
-end_tens:
-	subi tmp, -48
-	push arg
-	mov arg, tmp
-	rcall show_char
-	pop arg
-	subi arg, -48
-	rcall show_char
-	pop tmp
-	pop arg
-	ret
-	
-create_character: ; create alarm icon on LCD
+create_character: 						; create alarm icon on LCD
 	push arg
 	ldi arg, 0x40
 	rcall send_ins
@@ -505,7 +509,32 @@ create_character: ; create alarm icon on LCD
 	pop arg
 	ret
 
-alarm_clock_start:
-	ldi blink, (1<<BLINK_HOURS)|(1<<BLINK_MINUTES)|(1<<BLINK_SECONDS)|(1<<BLINK_ALARM)
-	ldi alarm, 1<<ALARM_SHOW
+
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;   delay routines  ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+
+delay_some_ms:
+	clr counter1
+delay_1:
+	clr counter2
+delay_2:
+	dec counter2
+	brne delay_2
+	dec counter1
+	brne delay_1
+	ret
+
+delay_one_ish_ms:
+	ldi counter1, 40
+delay_one_1:
+	clr counter2
+delay_one_2:
+	dec counter2
+	brne delay_one_2
+	dec counter1
+	brne delay_1
 	ret
