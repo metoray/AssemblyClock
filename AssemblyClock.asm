@@ -381,6 +381,37 @@ update_number_no_carry:
 	pop tmp
 	ret 
 
+increment_segment:
+	push ZL
+	push ZH
+	push arg
+	lpm YH, Z+
+	lpm YL, Z+
+	lpm tmp, Z+
+	sub tmp, arg
+	dec tmp
+	
+	clr arg
+	add ZL, tmp
+	adc ZH, arg
+	add YL, tmp
+	adc YH, arg
+	
+	ld tmp, Y
+	lpm arg, Z
+	
+	inc tmp
+	cp tmp, arg
+	brne increment_segment_no_overflow
+	clr tmp
+increment_segment_no_overflow:
+	st Y, tmp
+	sbr int_flags, 1<<update_display_flag
+	pop arg
+	pop ZH
+	pop ZL
+	ret
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;    Display Time    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
