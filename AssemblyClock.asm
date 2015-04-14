@@ -48,6 +48,7 @@
 ;Time in RAM
  .dseg
  time: .byte 4
+ alarm_time: .byte 3
 
  .cseg
 
@@ -100,6 +101,15 @@
 	st Z+, tmp				;minutes
 	ldi tmp, 55
 	st Z+, tmp				;seconds
+	
+	ldi ZH, high(alarm_time)
+	ldi ZL, low(alarm_time)
+	ldi tmp, 2
+	st Z+, tmp
+	clr tmp
+	st Z+, tmp ;hours
+	st Z+, tmp ;minutes
+	st Z+, tmp ;seconds
 	
 	ldi blink, 0x0 				;set blink register to none
 	rcall create_character 		; create alarm icon on LCD
