@@ -137,6 +137,8 @@ alarm_const: .db high(alarm_time), low(alarm_time), 2, 60, 24
 	alarm_clock_start:
 	ldi blink, (1<<BLINK_HOURS)|(1<<BLINK_MINUTES)|(1<<BLINK_SECONDS)
 	ldi alarm, 1<<ALARM_SHOW
+	ldi ZH, high(time_const<<1)
+	ldi ZL, low(time_const<<1)
 	ret
 
 
@@ -150,9 +152,7 @@ loop:
 	
 	sbrs int_flags, counter_flag	
 	rjmp loop_blink						; skipped if counter flag is set
-	
-	ldi ZH, high(time_const<<1)
-	ldi ZL, low(time_const<<1)
+
 	
 	sbrs settings, settings_on			; skip update time if we are setting time
 	rcall update_time					; update time
@@ -281,7 +281,12 @@ loop_settings_update:					;check in what state we are and update display/blink v
 	rcall settings_update_minutes
 	sbrc settings, settings_seconds
 	rcall settings_update_seconds
-
+	sbrc settings, settings_alarm_hours
+	rcall settings_update_alarm_hours
+	sbrc settings, settings_alarm_minutes
+	rcall settings_update_alarm_minutes
+	sbrc settings, settings_alarm_status
+	rcall settings_update_alarm_status
 
 
 
@@ -289,8 +294,6 @@ loop_update_display:
 	sbrs int_flags, update_display_flag	  
 	rjmp loop							; jump back to loop if display update is turned off
 	
-	ldi ZH, high(time_const<<1)
-	ldi ZL, low(time_const<<1)
 	rcall display_time
 	
 	cbr int_flags, 1<<update_display_flag
@@ -302,21 +305,40 @@ loop_update_display:
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 settings_update_hours:
-		ldi blink, (1<<BLINK_HOURS)
-		cbr alarm, 1<<ALARM_SHOW
-		ret
+	ldi blink, (1<<BLINK_HOURS)
+	cbr alarm, 1<<ALARM_SHOW
+	ret
 
 settings_update_minutes:
-		ldi blink, (1<<BLINK_MINUTES)
-		ret
+	ldi blink, (1<<BLINK_MINUTES)
+	ret
 
 settings_update_seconds:
-		ldi blink, (1<<BLINK_SECONDS)
-		ret
+	ldi blink, (1<<BLINK_SECONDS)
+	ret
+settings_update_alarm_hours:
+	ldi arg, 1
+	rcall send_ins
+	ldi ZH, high(alarm_const<<1)
+	ldi ZL, low(alarm_const<<1)
+	ldi blink, (1<<BLINK_HOURS)
+	sbr alarm, 1<<ALARM_SHOW
+	ret
+
+settings_update_alarm_minutes:
+	ldi blink, (1<<BLINK_MINUTES)
+	ret
+
+settings_update_alarm_status:
+	ldi blink, (1<<BLINK_MINUTES)|(1<<BLINK_HOURS)
+	ret
+
 settings_update_done:
-		clr blink
-		sbr alarm, 1<<ALARM_SHOW
-		ret
+	clr blink
+	sbr alarm, 1<<ALARM_SHOW
+	ldi ZH, high(time_const<<1)
+	ldi ZL, low(time_const<<1)
+	ret
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;   Timer Interrupt  ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -417,7 +439,9 @@ increment_segment_no_overflow:
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 
-display_time:	
+display_time:
+	push ZL
+	push ZH	
 	lpm YH, Z+
 	lpm YL, Z+
 	lpm tmp, Z+							; load amount of time segments
@@ -487,6 +511,8 @@ display_time_last_byte:
 	pop arg								; MULTI: pop last byte
 display_time_no_alarm:
 	rcall usart_send					; MULTI: send last byte to multisegment display
+	pop ZH
+	pop ZL								
 	ret
 
 
