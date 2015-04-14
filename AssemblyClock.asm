@@ -309,48 +309,52 @@ usart_send:
 	ret
 
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;   Multisegment Routines   ;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-	
+; numbertable for conversion of binary to multisegment numbers
 numbertable: .db 0b1110111, 0b0100100, 0b1011101, 0b1101101, 0b0101110, 0b1101011, 0b1111011, 0b0100101, 0b1111111, 0b1101111
+
 segment_digit:
-	push ZL
-	push ZH
-	cpi arg, 10
-	brge segment_error
-	ldi ZH, high(numbertable*2)
+	push ZL								; save Z registers
+	push ZH								;
+	cpi arg, 10							; compare number with 10
+	brge segment_error					; greater than 10 is not possible, error
+	ldi ZH, high(numbertable*2)			; load numbertable address in Z
 	ldi ZL, low(numbertable*2)
-	add ZL, arg
-	clr arg
-	adc ZH, arg
-	lpm arg, Z
-	pop ZH
-	pop ZL
+	add ZL, arg							; add corresponding number to ZL
+	clr arg								; empty arg
+	adc ZH, arg							; add possible carry to ZH
+	lpm arg, Z							; load corresponding multisegment number
+	pop ZH								; restore Z registers
+	pop ZL								;
 	ret
 segment_error:
-	ldi arg, 1<<3
+	ldi arg, 1<<3						; load error register
 	ret
 	
 show_segment:
-	push arg
-	push tmp
-	clr tmp
+	push arg							; store timesegment
+	push tmp							; store tmp
+	clr tmp								; empty tmp
 seg_tens:
-	cpi arg, 10
-	brlo seg_end_tens
-	inc tmp
-	subi arg, 10
-	rjmp seg_tens
+	cpi arg, 10							; compare timesegment with 10
+	brlo seg_end_tens					; if lower branch
+	inc tmp								; else: increase tens
+	subi arg, 10						; subtract ten
+	rjmp seg_tens						; jump back to seg_tens
 
 seg_end_tens:
-	push arg
-	mov arg, tmp
-	rcall segment_digit
-	rcall usart_send
-	pop arg
-	rcall segment_digit
-	rcall usart_send
-	pop tmp
-	pop arg
+	push arg							; store ones
+	mov arg, tmp						; load tens in arg
+	rcall segment_digit					; prepare multisegment digit
+	rcall usart_send					; send multisegment digit
+	pop arg								; load ones in arg
+	rcall segment_digit					; prepare multisegment digit					
+	rcall usart_send					; send multisegment digit
+	pop tmp								; restore temp
+	pop arg								; restore timesegment
 	ret
 
 init_lcd:
