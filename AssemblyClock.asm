@@ -200,72 +200,84 @@ update_number_no_carry:
 
 
 
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;    Display Time    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+
 display_time:					
-	ld tmp, Z+
-	rcall delay_some_ms
-	push blink
-	push tmp
-	ldi arg, 0x80
-	rcall send_ins
-	rcall usart_send
+	ld tmp, Z+							; load amount of time segments
+	rcall delay_some_ms					; delay a bit
+	push blink							; push blink status register
+	push tmp							; push amount of time segments
+	ldi arg, 0x80						
+	rcall send_ins						; LCD: set DDRAM address at 0x00
+	rcall usart_send					; MULTI: clear sent bytes
 display_time_loop:
-	dec tmp
-	ld arg, Z+
-	lsl blink
-	brcs display_time_loop_show
+	dec tmp								; lower amount of segments
+	ld arg, Z+							; load time segments
+	lsl blink							; shift blink register, will overflow to carry if needed
+	brcs display_time_loop_show         ; if carry set branch to display_time_loop_show 
 	;show blank segment
-	ldi arg, ' '
-	rcall show_char
+	ldi arg, ' '						; if carry set a blank space should be displayed
+	rcall show_char						; LCD send blank char
 	rcall show_char
 	ldi arg, 0x0
+	rcall usart_send					; MULTI: send empty segment
 	rcall usart_send
-	rcall usart_send
-	rjmp display_time_loop_continue
+	rjmp display_time_loop_continue		
 display_time_loop_show:
-	;show segment
-	rcall show_ascii
-	rcall show_segment
+	;show segment						; if carry not set a character should be displayed
+	rcall show_ascii					; LCD: display timesegment
+	rcall show_segment					; MULTI: display timesegment
 display_time_loop_continue:
-	tst tmp
-	breq display_time_loop_end
-	ldi arg, ':'
-	rcall show_char
-	rjmp display_time_loop
+	tst tmp								; test if tmp is zero
+	breq display_time_loop_end			; if zero go to end
+	ldi arg, ':'						; else: display colon
+	rcall show_char						; LCD:  send colon
+	rjmp display_time_loop				; jump back to load next segment
 display_time_loop_end:
-	pop arg
-	ldi tmp, 3
-	sub tmp, arg
+	pop arg								; pop amount of time segments
+	ldi tmp, 3							; 
+	sub tmp, arg						; subtract 3 from arg
 display_time_send_padding:
-	tst tmp
-	breq display_time_last_byte
-	dec tmp
-	ldi arg, 0x0
+	tst tmp								; is less than three segments are displayed padding should be added
+	breq display_time_last_byte			; if zero then three segments are displayed, jump last byte
+	dec tmp								; lower tmp to determine amount of padding
+	ldi arg, 0x0						; load blank segment
+	rcall usart_send					; send empty segment
 	rcall usart_send
-	rcall usart_send
-	rjmp display_time_send_padding
+	rjmp display_time_send_padding		; jump back to padding
 display_time_last_byte:
-	pop blink
-	ldi arg, 0b0110
-	push arg
-	ldi arg, 0x88
+	pop blink							; pop blink register
+	ldi arg, 0b0110						; MULTI: load last byte
+	push arg							; MULTI: push last byte
+	ldi arg, 0x88						; LCD: set cursor on alarm position
 	rcall send_ins
-	ldi arg, ' '
+	ldi arg, ' '						; LCD: push empty char
 	rcall show_char
-	pop arg
-	sbrs blink, ALARM_VISIBLE
-	rjmp display_time_no_alarm
-	sbrs alarm, ALARM_SHOW
-	rjmp display_time_no_alarm
-	sbr arg, 0b0001
-	push arg
-	ldi arg, 0x88
-	rcall send_ins
-	ldi arg, 0x0
-	rcall show_char
-	pop arg
+	pop arg								; MULTI: pop last byte
+	sbrs blink, ALARM_VISIBLE			; check if alarm is visible
+	rjmp display_time_no_alarm			; if bit set jump to no_alarm
+	sbrs alarm, ALARM_SHOW				; check if alarm is set
+	rjmp display_time_no_alarm			; if bit is set jump to no_alarm
+	sbr arg, 0b0001						; MULTI set alarmbit
+	push arg							; MULTI: save alarmbit
+	ldi arg, 0x88						; LCD: set cursor on alarm position
+	rcall send_ins						
+	ldi arg, 0x0						; LCD: load alarm icon
+	rcall show_char						
+	pop arg								; MULTI: pop last byte
 display_time_no_alarm:
-	rcall usart_send
+	rcall usart_send					; MULTI: send last byte to multisegment display
 	ret
+
+
+
+
+
+
 
 init_usart:
 	ldi tmp, (1 << RXEN) | (1 << TXEN) ; set send and receive bit
