@@ -252,9 +252,10 @@ loop_test_buttons1:
 loop_settings:
 	sbrs settings, settings_on
 	rjmp loop_update_display			; check if we are in settings, if not, jump to update display
-
+	
 	sbrs int_flags, button1_flag		; check if button 1 is pressed
 	rjmp loop_settings_button0			; if not, jump to button0
+	
 	cbr int_flags, 1<<button1_flag		; if so, clear button flag
 	cbr settings, 1<<settings_on		; remove settings label
 	lsl settings						; move settings one position
@@ -264,10 +265,23 @@ loop_settings:
 	rjmp loop_settings_update
 
 loop_settings_button0:
-	
-	sbrs int_flags, button1_flag		; check if button 0 is pressed
+	sbrs int_flags, button0_flag		; check if button 0 is pressed
 	rjmp loop_settings_update			; if not, jump to update_display
+	sbrc settings, settings_hours
+	ldi arg, 0
+	sbrc settings, settings_minutes
+	ldi arg, 1
+	sbrc settings, settings_seconds
+	ldi arg, 2
+	sbrc settings, settings_alarm_hours
+	ldi arg, 0
+	sbrc settings, settings_alarm_minutes
+	ldi arg, 1
+	rcall increment_segment
+	;sbrc settings, settings_alarm_status
+
 	cbr int_flags, 1<<button0_flag
+	rjmp loop_settings_update
 
 loop_settings_done:
 	rcall settings_update_done
