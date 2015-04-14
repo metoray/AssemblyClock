@@ -99,6 +99,7 @@
 	rcall alarm_clock_start 	; start the clock
 
 
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;      Main Loop     ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -146,6 +147,7 @@ loop_update_display:
 	rjmp loop
 
 
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;   Timer Interrupt  ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -161,6 +163,7 @@ timer1:
 	mov last_counter, counter
 	sbr int_flags, 1<<any_flag			; set the any flag
 	reti
+
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -276,33 +279,37 @@ display_time_no_alarm:
 
 
 
-
-
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;   USART routines   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 init_usart:
-	ldi tmp, (1 << RXEN) | (1 << TXEN) ; set send and receive bit
+	ldi tmp, (1 << RXEN) | (1 << TXEN) 	; set send and receive bit
 	out UCSRB, tmp
 
 	ldi tmp, (1 << URSEL) | (1 << UCSZ0) | (1 << UCSZ1)
-	out UCSRC, tmp
+	out UCSRC, tmp						; set frame format
 
-	ldi tmp, high(BAUD_PRESCALE)
-	out UBRRH, tmp
+	ldi tmp, high(BAUD_PRESCALE)		; set baud rate
+	out UBRRH, tmp					
 	ldi tmp, low(BAUD_PRESCALE)
 	out UBRRL, tmp
 	ret
 	
-usart_recv:
+usart_recv:								; check if receive bit is set
 	sbis UCSRA, RXC
-	rjmp usart_recv
-	in arg, UDR
-	ret
+	rjmp usart_recv						; if not jump back
+	in arg, UDR							; read data
+	ret								
 	
 usart_send:
-	sbis UCSRA, UDRE
-	rjmp usart_send
-	out UDR, arg
+	sbis UCSRA, UDRE					; check if data register is empty
+	rjmp usart_send						; if not wait till empty
+	out UDR, arg						; fill data register
 	ret
+
+
+
 	
 numbertable: .db 0b1110111, 0b0100100, 0b1011101, 0b1101101, 0b0101110, 0b1101011, 0b1111011, 0b0100101, 0b1111111, 0b1101111
 segment_digit:
