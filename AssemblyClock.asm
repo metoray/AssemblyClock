@@ -449,6 +449,10 @@ increment_segment_no_overflow:
 	ret
 	
 compare_times:
+	push arg
+	push tmp
+	push ZH
+	push ZL
 	lpm tmp, Z+ ;TH1
 	push tmp
 	lpm tmp, Z+ ;TL1
@@ -491,10 +495,15 @@ compare_times_check_common_segments:
 	brne compare_times_return_false
 	dec r0
 	brne compare_times_check_common_segments
+	pop arg
 	set
 	ret
 	
 compare_times_return_false:
+	pop ZL
+	pop ZH
+	pop tmp
+	pop arg
 	clt
 	ret
 
