@@ -495,6 +495,7 @@ display_time_loop_end:
 	pop arg								; pop amount of time segments
 	ldi tmp, 3							; 
 	sub tmp, arg						; subtract 3 from arg
+	push arg
 display_time_send_padding:
 	tst tmp								; is less than three segments are displayed padding should be added
 	breq display_time_last_byte			; if zero then three segments are displayed, jump last byte
@@ -504,8 +505,17 @@ display_time_send_padding:
 	rcall usart_send
 	rjmp display_time_send_padding		; jump back to padding
 display_time_last_byte:
+	pop arg
+	mov tmp, arg
 	pop blink							; pop blink register
 	ldi arg, 0b0110						; MULTI: load last byte
+	cpi tmp, 3
+	brge display_time_last_byte_end
+	cbr arg, 1<<2
+	cpi tmp, 2
+	brge display_time_last_byte_end
+	cbr arg, 1<<1
+display_time_last_byte_end:
 	sbrc alarm, ALARM_TRIGGERED			; set alarm bit in last byte if alarm was triggered
 	sbr arg, 1<<3
 	push arg							; MULTI: push last byte
