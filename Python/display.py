@@ -76,8 +76,15 @@ pygame.mixer.music.load('alarm.wav')
 class Buzzer:
 	def __init__(self):
 		self.sound_playing = False
+		
+	def play(self,enabled):
+		if enabled:
+			self.sound_sound()
+		else:
+			self.stop_sound()
 
 	def sound_sound(self):
+		print "Playing sound!"
 		if not self.sound_playing:
 			pygame.mixer.music.play(-1)
 			self.sound_playing = True
@@ -160,8 +167,8 @@ while True:
 	for i,byte in enumerate(serial_data[0:6]):
 		segments[i].number = byte
 	last_byte = serial_data[-1]
-	set_sound[bool(1<<3)]()
-	colons = [bool(1<<1&last_byte),bool(1<<2&last_byte)]
+	buzzer.play(1<<3&last_byte)
+	colons = [bool(1<<2&last_byte),bool(1<<1&last_byte)]
 	alarm = bool(1<<0&last_byte)
 	icon = pygame.transform.scale(screen,(32,32))
 	pygame.display.update()
