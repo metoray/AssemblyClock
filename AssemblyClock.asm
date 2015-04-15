@@ -71,7 +71,7 @@ alarm_const: .db high(alarm_time), low(alarm_time), 2, 60, 24
 	ldi tmp, high(RAMEND)
 	out SPH, tmp
 
-	ldi tmp, (1<<CTC1) | (1<<CS12) | (1<<CS10) | (1<<WGM12)	; enable timer with prescaler 1024
+	ldi tmp, (1<<CTC1) | (1<<CS12) | (1<<WGM12)	; enable timer with prescaler 256
 	out TCCR1B, tmp
 
 	rcall init_lcd					; init lcd
@@ -81,9 +81,9 @@ alarm_const: .db high(alarm_time), low(alarm_time), 2, 60, 24
 	ser tmp
 	out DDRB, tmp					;debug leds
 
-	ldi tmp, high((freq/1024)/16)   ;Set timer compare to 250ms freq/prescaler/16
+	ldi tmp, high((freq/256)/32)   ;Set timer compare to 250ms freq/prescaler/16
 	out OCR1AH, tmp
-	ldi tmp, low((freq/1024)/16)
+	ldi tmp, low((freq/256)/32)
 	out OCR1AL, tmp
 	ldi tmp, 1<<OCIE1A				; enable timer compare interrupt
 	out TIMSK, tmp
@@ -181,7 +181,7 @@ loop_check_buttons:
 	push buttons						; save button register
 	andi buttons, 0xF					; keep lower bits
 	inc buttons							; increase buttons
-	sbrc buttons, 3						; check if buttons is 8
+	sbrc buttons, 4						; check if buttons is 16
 	ldi buttons, 2						; if so, load 2
 	sbrc arg, 0							; check if pinA0 is low(button pressed)
 	clr buttons							; if not: reset to 0
@@ -196,7 +196,7 @@ next_button:
 	swap buttons						; swap nibbles
 	andi buttons, 0xF					; keep higher bits
 	inc buttons							; increase higher counter
-	sbrc buttons, 3						; check if higher counter is 8
+	sbrc buttons, 4						; check if higher counter is 16
 	ldi buttons, 2						; if so, load 2
 	sbrc arg, 1							; check if pinA1 is low(button pressed)
 	clr buttons							; is not, reset to 0
@@ -393,10 +393,10 @@ timer1:
 	and last_counter, counter
 	com counter
 	sbr int_flags, 1<<button_flag ; set the button
-	sbrc last_counter, 2
-	sbr int_flags, 1<<blink_flag ; set the blink on counter = 0b?????0??
 	sbrc last_counter, 3
-	sbr int_flags, 1<<counter_flag ; set the counter flag on counter = 0b????0???
+	sbr int_flags, 1<<blink_flag ; set the blink on counter = 0b????0???
+	sbrc last_counter, 4
+	sbr int_flags, 1<<counter_flag ; set the counter flag on counter = 0b???0????
 	mov last_counter, counter
 	sbr int_flags, 1<<any_flag			; set the any flag
 	reti
@@ -554,6 +554,12 @@ swap_pointers:
 
 
 display_time:
+	mov tmp, blink
+	andi tmp, 0xF
+	swap tmp
+	com tmp
+	cbr tmp, 0xF
+	or blink, tmp
 	push ZL
 	push ZH	
 	lpm YH, Z+
