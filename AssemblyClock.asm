@@ -701,7 +701,7 @@ show_segment:
 	push arg							; store timesegment
 	push tmp							; store tmp
 	clr tmp								; empty tmp
-seg_tens:								; TODO: BAD: twice tenssegmenting (see twice tenssegmenting)
+seg_tens:								
 	cpi arg, 10							; compare timesegment with 10
 	brlo seg_end_tens					; if lower branch
 	inc tmp								; else: increase tens
@@ -769,7 +769,7 @@ show_ascii:
 	push arg							; save timesegment
 	push tmp							; save tmp
 	clr tmp
-tens:									; TODO: BAD: twice tenssegmenting (see twice tenssegmenting)
+tens:									
 	cpi arg, 10
 	brlo end_tens
 	inc tmp
