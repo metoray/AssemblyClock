@@ -145,25 +145,25 @@ loop:
 	rjmp loop_blink						; skipped if counter flag is set
 
 	
-	cpi settings, 0x40
-	breq time_is_not_frozen
-	cpi settings, 0x0
-	breq time_is_not_frozen
-	rjmp time_is_frozen
+	cpi settings, 0x40					; check if we are in settings, time has to halt
+	breq time_is_not_frozen				; not in settings, update time
+	cpi settings, 0x0					
+	breq time_is_not_frozen				; not in settings, update time
+	rjmp time_is_frozen					; in settings, don't update time
 	
 time_is_not_frozen:
 	rcall update_time					; update time
 	
-	push ZH
+	push ZH								; save Z registers
 	push ZL
-	ldi YH, high(alarm_const<<1)
+	ldi YH, high(alarm_const<<1)		; load alarmpointer
 	ldi YL, low(alarm_const<<1)
-	ldi ZH, high(time_const<<1)
+	ldi ZH, high(time_const<<1)			; load timepointer
 	ldi ZL, low(time_const<<1)
-	rcall compare_times
-	brtc no_buzz
-	sbrc alarm, ALARM_ENABLED
-	sbr alarm, 1<<ALARM_TRIGGERED
+	rcall compare_times					; compare times
+	brtc no_buzz						; branch if T flag is cleared
+	sbrc alarm, ALARM_ENABLED			; if alarm enabled
+	sbr alarm, 1<<ALARM_TRIGGERED		; set the alarm bit
 no_buzz:	
 	pop ZL
 	pop ZH
@@ -499,35 +499,35 @@ increment_segment_no_overflow:
 	ret
 	
 compare_times:
-	push arg
-	push tmp
-	push ZH
-	push ZL
-	lpm tmp, Z+ ;TH1
-	push tmp
-	lpm tmp, Z+ ;TL1
-	push tmp
-	lpm r0, Z	; size of time 1
+	push arg							; save registers
+	push tmp							;
+	push ZH								;
+	push ZL								;
+	lpm tmp, Z+ 						; TH1
+	push tmp							
+	lpm tmp, Z+ 						; TL1					
+	push tmp							
+	lpm r0, Z							; size of time 1
 	rcall swap_pointers
-	lpm tmp, Z+ ;TH2
+	lpm tmp, Z+ 						; TH2
 	push tmp
-	lpm tmp, Z+ ;TL2
+	lpm tmp, Z+ 						; TL2
 	push tmp
-	lpm r1, Z	;size of time 2
+	lpm r1, Z							; size of time 2
 	
-	pop YL	;TL2
-	pop YH	;TH2
-	pop ZL	;TL1
-	pop ZH	;TH1
-	cp r0, r1	;compare size1 to size2
-	brge compare_times_correct_order	;time1 has more units than time2
-	rcall swap_pointers	;swap times
-	push r0
+	pop YL								; TL2
+	pop YH								; TH2
+	pop ZL								; TL1
+	pop ZH								; TH1
+	cp r0, r1							; compare size1 to size2
+	brge compare_times_correct_order	; time1 has more units than time2
+	rcall swap_pointers					; swap times
+	push r0								; swap sizes
 	push r1
 	pop r0
 	pop r1
 compare_times_correct_order:
-	mov tmp, r0	;calculate difference in sizes
+	mov tmp, r0							; calculate difference in sizes
 	sub tmp, r1
 compare_times_check_zeroes:
 	tst tmp
@@ -553,14 +553,14 @@ compare_times_check_common_segments:
 	ret
 	
 compare_times_return_false:
-	pop ZL
+	pop ZL								; return Z registers 
 	pop ZH
-	pop tmp
-	pop arg
-	clt
+	pop tmp								; return tmp register
+	pop arg								; return arg register
+	clt									; clear T flag
 	ret
 
-swap_pointers:
+swap_pointers:							; Swap the pointers
 	push ZL
 	push ZH
 	push YL
@@ -577,16 +577,16 @@ swap_pointers:
 
 
 display_time:
-	mov tmp, blink
-	andi tmp, 0xF
-	swap tmp
-	com tmp
-	cbr tmp, 0xF
-	or blink, tmp
-	push ZL
-	push ZH	
-	lpm YH, Z+
-	lpm YL, Z+
+	mov tmp, blink						; process blink status
+	andi tmp, 0xF						; remove higher bits
+	swap tmp							; swap nibbles
+	com tmp								; invert bits
+	cbr tmp, 0xF						; remove lower bits
+	or blink, tmp						; combine tmp and blink back togehter
+	push ZL								; save Z registers
+	push ZH								;
+	lpm YH, Z+							; load address in Z to Y 
+	lpm YL, Z+							; 
 	lpm tmp, Z+							; load amount of time segments
 	clr arg
 	add YL, tmp
@@ -624,7 +624,7 @@ display_time_loop_end:
 	pop arg								; pop amount of time segments
 	ldi tmp, 3							; 
 	sub tmp, arg						; subtract 3 from arg
-	push arg
+	push arg							; save arg
 display_time_send_padding:
 	tst tmp								; is less than three segments are displayed padding should be added
 	breq display_time_last_byte			; if zero then three segments are displayed, jump last byte
@@ -634,16 +634,16 @@ display_time_send_padding:
 	rcall usart_send
 	rjmp display_time_send_padding		; jump back to padding
 display_time_last_byte:
-	pop arg
-	mov tmp, arg
+	pop arg								; restore arg
+	mov tmp, arg						; copy arg to tmp
 	pop blink							; pop blink register
 	ldi arg, 0b0110						; MULTI: load last byte
-	cpi tmp, 3
-	brge display_time_last_byte_end
-	cbr arg, 1<<1
-	cpi tmp, 2
-	brge display_time_last_byte_end
-	cbr arg, 1<<2
+	cpi tmp, 3							; compare tmp with three
+	brge display_time_last_byte_end		; if greater or equal branch 
+	cbr arg, 1<<1						; remove one byte for colon
+	cpi tmp, 2							; compare with two
+	brge display_time_last_byte_end		; branch if greater or equal
+	cbr arg, 1<<2						; remove second colon(none remain)
 display_time_last_byte_end:
 	sbrc alarm, ALARM_TRIGGERED			; set alarm bit in last byte if alarm was triggered
 	sbr arg, 1<<3
