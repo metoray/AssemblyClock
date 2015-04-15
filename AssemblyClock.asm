@@ -154,8 +154,30 @@ loop:
 	rjmp loop_blink						; skipped if counter flag is set
 
 	
-	sbrs settings, settings_on			; skip update time if we are setting time
+	cpi settings, 0x40
+	breq time_is_not_frozen
+	cpi settings, 0x0
+	breq time_is_not_frozen
+	rjmp time_is_frozen
+	
+time_is_not_frozen:
 	rcall update_time					; update time
+	
+	push ZH
+	push ZL
+	ldi YH, high(alarm_const<<1)
+	ldi YL, low(alarm_const<<1)
+	ldi ZH, high(time_const<<1)
+	ldi ZL, low(time_const<<1)
+	rcall compare_times
+	brtc no_buzz
+	sbrc alarm, ALARM_ENABLED
+	sbr alarm, 1<<ALARM_TRIGGERED
+no_buzz:	
+	pop ZL
+	pop ZH
+	
+time_is_frozen:
 	
 	cbr int_flags, 1<<counter_flag		; clear counter_flag
 
@@ -495,6 +517,9 @@ compare_times_check_common_segments:
 	brne compare_times_return_false
 	dec r0
 	brne compare_times_check_common_segments
+	pop ZL
+	pop ZH
+	pop tmp
 	pop arg
 	set
 	ret
@@ -581,10 +606,10 @@ display_time_last_byte:
 	ldi arg, 0b0110						; MULTI: load last byte
 	cpi tmp, 3
 	brge display_time_last_byte_end
-	cbr arg, 1<<2
+	cbr arg, 1<<1
 	cpi tmp, 2
 	brge display_time_last_byte_end
-	cbr arg, 1<<1
+	cbr arg, 1<<2
 display_time_last_byte_end:
 	sbrc alarm, ALARM_TRIGGERED			; set alarm bit in last byte if alarm was triggered
 	sbr arg, 1<<3
