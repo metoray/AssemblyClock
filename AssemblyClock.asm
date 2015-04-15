@@ -491,18 +491,10 @@ compare_times_check_common_segments:
 	brne compare_times_return_false
 	dec r0
 	brne compare_times_check_common_segments
-	ldi arg, ~0b11110000
-	out PORTB, arg
 	set
 	ret
 	
 compare_times_return_false:
-	;andi arg, 0xF0
-	;swap arg
-	;andi tmp, 0xF0
-	;or arg, tmp
-	;com arg
-	out PORTB, tmp
 	clt
 	ret
 
