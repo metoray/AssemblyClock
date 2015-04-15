@@ -10,17 +10,8 @@
  .equ button_flag = 3 					; enabled when buttons should be checked
  .equ button0_flag = 4 					; enabled if button 0 was pressed
  .equ button1_flag = 5 					; enabled if button 1 was pressed
+ .equ clear_display_flag = 6
  .equ any_flag = 7 						; enabled when interrupt happens
- 
-; values for the settings register
-.equ settings_on = 0					; are we currently setting the time?
-.equ settings_hours = 1					; setting the hours
-.equ settings_minutes = 2				; setting the minutes
-.equ settings_seconds = 3				; setting the seconds
-.equ settings_alarm_hours = 4			; setting the alarm hours
-.equ settings_alarm_minutes = 5			; setting the alarm minutes
-.equ settings_alarm_status = 6			; setting alarm on/off
-.equ settings_done = 7					; setting is done
 
  ;Ports
  .equ LCD=PORTD
@@ -154,8 +145,10 @@ loop:
 	rjmp loop_blink						; skipped if counter flag is set
 
 	
-	sbrs settings, settings_on			; skip update time if we are setting time
+	cpi settings, 0x40
+	brne time_is_frozen
 	rcall update_time					; update time
+time_is_frozen:
 	
 	cbr int_flags, 1<<counter_flag		; clear counter_flag
 
@@ -180,7 +173,7 @@ loop_blink:
 
 loop_check_buttons:
 	sbrs int_flags, button_flag			
-	rjmp loop_test_buttons				; jump to loop_test_buttons if check buttons is turned off
+	rjmp loop_button0				; jump to loop_test_buttons if check buttons is turned off
 	
 	in arg, PINA						; read pinA
 	clr tmp								; clear tmp
@@ -218,91 +211,39 @@ end_button:
 	
 	mov arg, int_flags					; store int_flags
 	com arg								; invert flags
-	out PORTB, arg						; push to output
+	;out PORTB, arg						; push to output
 	
 	cbr int_flags, 1<<button_flag		; clear check_button flag
 
 
 
-loop_test_buttons:
+loop_button0:
 	sbrs int_flags, button0_flag
-	rjmp loop_test_buttons1				; check if button 0 was pressed, if not, jump to button 1
+	rjmp loop_button1				; check if button 0 was pressed, if not, jump to button 1
 	
-	sbrc settings, settings_on
-	rjmp loop_test_buttons1				; check if we are in settings, if so, jump to next button
-	ldi tmp, (1<<ALARM_SHOW)|(1<<ALARM_ENABLED)
-	eor alarm, tmp
-	sbr int_flags, 1<<update_display_flag
-
+	mov arg, settings
+	andi arg, 0xF
+	rcall increment_segment
+	
 	cbr int_flags, 1<<button0_flag
 	
-loop_test_buttons1:
+loop_button1:
 	sbrs int_flags, button1_flag
-	rjmp loop_update_display			; check if button 1 was pressed, if not jump to loop_update_display
+	rjmp loop_clear_display			; check if button 1 was pressed, if not jump to loop_update_display
 	
-	sbrc settings, settings_on			; check if we are in settings
-	rjmp loop_settings					; if so, jump to settings
-	sbr settings, 1<<settings_on		; if we are not in settings set register flag for settings
-	sbr settings, 1<<settings_hours
+	rcall increment_state
+	sbr int_flags, 1<<update_display_flag
 
 	cbr int_flags, 1<<button1_flag
 
-
-
-loop_settings:
-	sbrs settings, settings_on
-	rjmp loop_update_display			; check if we are in settings, if not, jump to update display
-	
-	sbrs int_flags, button1_flag		; check if button 1 is pressed
-	rjmp loop_settings_button0			; if not, jump to button0
-	
-	cbr int_flags, 1<<button1_flag		; if so, clear button flag
-	cbr settings, 1<<settings_on		; remove settings label
-	lsl settings						; move settings one position
-	sbrc settings, settings_done	
-	rjmp loop_settings_done				; if settings_done is set we are done so jump to there
-	sbr settings, 1<<settings_on		; else we are still in settings
-	rjmp loop_settings_update
-
-loop_settings_button0:
-	sbrs int_flags, button0_flag		; check if button 0 is pressed
-	rjmp loop_settings_update			; if not, jump to update_display
-	sbrc settings, settings_hours
-	ldi arg, 0
-	sbrc settings, settings_minutes
-	ldi arg, 1
-	sbrc settings, settings_seconds
-	ldi arg, 2
-	sbrc settings, settings_alarm_hours
-	ldi arg, 0
-	sbrc settings, settings_alarm_minutes
-	ldi arg, 1
-	rcall increment_segment
-	;sbrc settings, settings_alarm_status
-
-	cbr int_flags, 1<<button0_flag
-	rjmp loop_settings_update
-
-loop_settings_done:
-	rcall settings_update_done
-	clr settings
+loop_clear_display:
+	sbrs int_flags, clear_display_flag
 	rjmp loop_update_display
-
-loop_settings_update:					;check in what state we are and update display/blink variables
-	sbrc settings, settings_hours
-	rcall settings_update_hours
-	sbrc settings, settings_minutes
-	rcall settings_update_minutes
-	sbrc settings, settings_seconds
-	rcall settings_update_seconds
-	sbrc settings, settings_alarm_hours
-	rcall settings_update_alarm_hours
-	sbrc settings, settings_alarm_minutes
-	rcall settings_update_alarm_minutes
-	sbrc settings, settings_alarm_status
-	rcall settings_update_alarm_status
-
-
+	
+	ldi arg, 0x1
+	rcall send_ins
+	
+	cbr int_flags, 1<<clear_display_flag
 
 loop_update_display:
 	sbrs int_flags, update_display_flag	  
@@ -311,47 +252,109 @@ loop_update_display:
 	rcall display_time
 	
 	cbr int_flags, 1<<update_display_flag
+	mov arg, ZH
+	rcall show_ascii
+	mov arg, ZL
+	rcall show_ascii
+	
+	out PORTB, settings
 	
 	rjmp loop
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;   Settings helper  ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
-settings_update_hours:
-	ldi blink, (1<<BLINK_HOURS)
-	cbr alarm, 1<<ALARM_SHOW
-	ret
-
-settings_update_minutes:
-	ldi blink, (1<<BLINK_MINUTES)
-	ret
-
-settings_update_seconds:
-	ldi blink, (1<<BLINK_SECONDS)
-	ret
-settings_update_alarm_hours:
-	ldi arg, 1
-	rcall send_ins
-	ldi ZH, high(alarm_const<<1)
-	ldi ZL, low(alarm_const<<1)
-	ldi blink, (1<<BLINK_HOURS)
-	sbr alarm, 1<<ALARM_SHOW
-	ret
-
-settings_update_alarm_minutes:
-	ldi blink, (1<<BLINK_MINUTES)
-	ret
-
-settings_update_alarm_status:
-	ldi blink, (1<<BLINK_MINUTES)|(1<<BLINK_HOURS)
-	ret
-
-settings_update_done:
-	clr blink
-	sbr alarm, 1<<ALARM_SHOW
+settings_update_clock_pointer:
+	push settings
+	push tmp
+	andi settings, 0xF0 ; obtain current state
+	swap settings
+	cpi settings, 2
+	breq settings_update_clock_pointer_alarm
+	cpi settings, 3
+	breq settings_update_clock_pointer_alarm
 	ldi ZH, high(time_const<<1)
 	ldi ZL, low(time_const<<1)
+	rjmp settings_update_clock_pointer_return
+settings_update_clock_pointer_alarm:
+	ldi ZH, high(alarm_const<<1)
+	ldi ZL, low(alarm_const<<1)
+settings_update_clock_pointer_return:
+	pop tmp
+	pop settings
+	push arg
+	sbr int_flags, 1<<clear_display_flag
+	pop arg
+	ret
+
+max_substate: .db 1, 3, 2, 1, 1
+increment_state:
+	mov tmp, settings
+	andi settings, 0xF0
+	andi tmp, 0x0F
+	swap settings
+	
+	clr arg
+	ldi ZH, high(max_substate<<1)
+	ldi ZL, low(max_substate<<1)
+	
+	add ZL, settings
+	adc ZH, arg
+	
+	lpm arg, Z+
+	
+	inc tmp
+	cp tmp, arg
+	brne increment_state_return
+	
+	inc settings
+	clr tmp
+	
+	cpi settings, 5
+	brne increment_state_return
+	ldi settings, 1
+	
+increment_state_return:
+	swap settings
+	or settings, tmp
+	rcall settings_update_clock_pointer
+	rcall settings_update_blink
+	ret	
+	
+settings_update_blink:
+	push settings
+	push arg
+	andi blink, 1<<BLINK_ALARM
+	mov arg, settings
+	andi arg, 0xF0
+	swap arg
+	andi settings, 0xF
+	ldi tmp, 1
+	cpi arg, 2
+	cpse arg, tmp
+	brne settings_update_blink_all_or_nothing 
+	ldi tmp, 1<<BLINK_HOURS
+	inc settings
+settings_update_blink_shift:
+	dec settings
+	breq settings_update_blink_end
+	lsr tmp
+	rjmp settings_update_blink_shift
+settings_update_blink_end:
+	or blink, tmp
+	pop arg
+	pop settings
+	ret
+	
+settings_update_blink_all_or_nothing:
+	mov settings, arg
+	clr arg
+	ldi tmp, 4
+	cpse settings, tmp
+	ldi arg, 0b1110
+	or blink, arg
+	pop arg
+	pop settings
 	ret
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -627,8 +630,8 @@ segment_digit:
 	push ZH								;
 	cpi arg, 10							; compare number with 10
 	brge segment_error					; greater than 10 is not possible, error
-	ldi ZH, high(numbertable*2)			; load numbertable address in Z
-	ldi ZL, low(numbertable*2)
+	ldi ZH, high(numbertable<<1)			; load numbertable address in Z
+	ldi ZL, low(numbertable<<1)
 	add ZL, arg							; add corresponding number to ZL
 	clr arg								; empty arg
 	adc ZH, arg							; add possible carry to ZH
