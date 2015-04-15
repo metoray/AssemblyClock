@@ -106,19 +106,19 @@ alarm_const: .db high(alarm_time), low(alarm_time), 2, 60, 24
 	
 	ldi ZH, high(time)		;point Z reg to time in RAM
 	ldi ZL, low(time)
-	ldi tmp, 55
+	ldi tmp, 0
 	st Z+, tmp				;seconds
-	ldi tmp, 59
+	ldi tmp, 0
 	st Z+, tmp				;minutes
-	ldi tmp, 4
+	ldi tmp, 0
 	st Z+, tmp				;hours
 	
 	ldi ZH, high(alarm_time)
 	ldi ZL, low(alarm_time)
 	clr tmp
-	st Z+, tmp ;hours
-	st Z+, tmp ;minutes
 	st Z+, tmp ;seconds
+	st Z+, tmp ;minutes
+	st Z+, tmp ;hours
 	
 	ldi blink, 0x0 				;set blink register to none
 	rcall create_character 		; create alarm icon on LCD
@@ -446,6 +446,75 @@ increment_segment_no_overflow:
 	pop arg
 	pop ZH
 	pop ZL
+	ret
+	
+compare_times:
+	lpm tmp, Z+ ;TH1
+	push tmp
+	lpm tmp, Z+ ;TL1
+	push tmp
+	lpm r0, Z	; size of time 1
+	rcall swap_pointers
+	lpm tmp, Z+ ;TH2
+	push tmp
+	lpm tmp, Z+ ;TL2
+	push tmp
+	lpm r1, Z	;size of time 2
+	
+	pop YL	;TL2
+	pop YH	;TH2
+	pop ZL	;TL1
+	pop ZH	;TH1
+	cp r0, r1	;compare size1 to size2
+	brge compare_times_correct_order	;time1 has more units than time2
+	rcall swap_pointers	;swap times
+	push r0
+	push r1
+	pop r0
+	pop r1
+compare_times_correct_order:
+	mov tmp, r0	;calculate difference in sizes
+	sub tmp, r1
+compare_times_check_zeroes:
+	tst tmp
+	breq compare_times_check_common_segments
+	dec tmp
+	dec r0
+	ld arg, Z+
+	tst arg
+	brne compare_times_return_false
+	rjmp compare_times_check_zeroes
+compare_times_check_common_segments:
+	ld arg, Z+
+	ld tmp, Y+
+	cp arg, tmp
+	brne compare_times_return_false
+	dec r0
+	brne compare_times_check_common_segments
+	ldi arg, ~0b11110000
+	out PORTB, arg
+	set
+	ret
+	
+compare_times_return_false:
+	;andi arg, 0xF0
+	;swap arg
+	;andi tmp, 0xF0
+	;or arg, tmp
+	;com arg
+	out PORTB, tmp
+	clt
+	ret
+
+swap_pointers:
+	push ZL
+	push ZH
+	push YL
+	push YH
+	pop ZH
+	pop ZL
+	pop YH
+	pop YL
 	ret
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
