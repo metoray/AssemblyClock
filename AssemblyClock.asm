@@ -467,35 +467,35 @@ update_number_no_carry:
 	pop tmp
 	ret 
 
-increment_segment:
-	push ZL
-	push ZH
-	push arg
-	lpm YH, Z+
-	lpm YL, Z+
-	lpm tmp, Z+
-	sub tmp, arg
-	dec tmp
+increment_segment:						; increment one timesegments
+	push ZL								; save Z registers
+	push ZH								;
+	push arg							; save the argument(time designator)
+	lpm YH, Z+							; load timepointer
+	lpm YL, Z+							;
+	lpm tmp, Z+							; load amount of segments
+	sub tmp, arg						; subtract amount of segments to get wanted segments
+	dec tmp								; decrease once more
 	
-	clr arg
-	add ZL, tmp
-	adc ZH, arg
-	add YL, tmp
-	adc YH, arg
+	clr arg								; clear arg
+	add ZL, tmp							; point to segment
+	adc ZH, arg							; 
+	add YL, tmp							; point to segment
+	adc YH, arg							; 
 	
-	ld tmp, Y
-	lpm arg, Z
+	ld tmp, Y							; load segment
+	lpm arg, Z							; load overflow value
 	
-	inc tmp
-	cp tmp, arg
-	brne increment_segment_no_overflow
-	clr tmp
+	inc tmp								; increase segment
+	cp tmp, arg							; compare with overflow value
+	brne increment_segment_no_overflow  ; branch if not equal
+	clr tmp								; if equal reset to zero
 increment_segment_no_overflow:
-	st Y, tmp
-	sbr int_flags, 1<<update_display_flag
-	pop arg
-	pop ZH
-	pop ZL
+	st Y, tmp							; save segment
+	sbr int_flags, 1<<update_display_flag ; set update display flag
+	pop arg								; restore arg
+	pop ZH								; restore Z registers
+	pop ZL								;
 	ret
 	
 compare_times:
