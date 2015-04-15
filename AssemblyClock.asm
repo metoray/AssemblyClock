@@ -221,10 +221,21 @@ loop_button0:
 	sbrs int_flags, button0_flag
 	rjmp loop_button1				; check if button 0 was pressed, if not, jump to button 1
 	
+	
+	cpi settings, 0x30
+	breq toggle_alarm
+	cpi settings, 0x40
+	breq toggle_alarm
 	mov arg, settings
 	andi arg, 0xF
 	rcall increment_segment
+	rjmp loop_button0_end
+toggle_alarm:
+	cbr alarm, 1<<ALARM_TRIGGERED	; disable buzzer
+	ldi tmp, 1<<ALARM_ENABLED
+	eor alarm, tmp
 	
+loop_button0_end:
 	cbr int_flags, 1<<button0_flag
 	
 loop_button1:
@@ -251,13 +262,10 @@ loop_update_display:
 	
 	rcall display_time
 	
+	rcall update_alarm_indicator
 	cbr int_flags, 1<<update_display_flag
-	mov arg, ZH
-	rcall show_ascii
-	mov arg, ZL
-	rcall show_ascii
 	
-	out PORTB, settings
+	out PORTB, alarm
 	
 	rjmp loop
 
@@ -355,6 +363,24 @@ settings_update_blink_all_or_nothing:
 	or blink, arg
 	pop arg
 	pop settings
+	ret
+	
+update_alarm_indicator:
+	sbr blink, 1<<BLINK_ALARM
+	cpi settings, 0x20
+	breq update_alarm_indicator_do_blink
+	sbrs alarm, 1<<ALARM_TRIGGERED
+	cbr blink, 1<<BLINK_ALARM
+update_alarm_indicator_do_blink:
+	sbr alarm, 1<<ALARM_SHOW
+	mov tmp, settings
+	swap tmp
+	andi tmp, 0x0F
+	cpi tmp, 0x2
+	breq update_alarm_indicator_show
+	sbrs alarm, ALARM_ENABLED
+	cbr alarm, 1<<ALARM_SHOW
+update_alarm_indicator_show:
 	ret
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
