@@ -221,6 +221,7 @@ loop_button0:
 	sbrs int_flags, button0_flag
 	rjmp loop_button1				; check if button 0 was pressed, if not, jump to button 1
 	
+	sbr int_flags, 1<<update_display_flag
 	
 	cpi settings, 0x30
 	breq toggle_alarm
@@ -367,15 +368,15 @@ settings_update_blink_all_or_nothing:
 	
 update_alarm_indicator:
 	sbr blink, 1<<BLINK_ALARM
-	cpi settings, 0x20
+	mov tmp, settings
+	swap tmp
+	andi tmp, 0x0F
+	cpi tmp, 0x2
 	breq update_alarm_indicator_do_blink
 	sbrs alarm, 1<<ALARM_TRIGGERED
 	cbr blink, 1<<BLINK_ALARM
 update_alarm_indicator_do_blink:
 	sbr alarm, 1<<ALARM_SHOW
-	mov tmp, settings
-	swap tmp
-	andi tmp, 0x0F
 	cpi tmp, 0x2
 	breq update_alarm_indicator_show
 	sbrs alarm, ALARM_ENABLED
@@ -620,22 +621,20 @@ display_time_last_byte_end:
 	push arg							; MULTI: push last byte
 	ldi arg, 0x88						; LCD: set cursor on alarm position
 	rcall send_ins
-	ldi arg, ' '						; LCD: push empty char
-	rcall show_char
+	ldi tmp, ' '						; LCD: push empty char
 	pop arg								; MULTI: pop last byte
 	sbrs blink, ALARM_VISIBLE			; check if alarm is visible
 	rjmp display_time_no_alarm			; if bit set jump to no_alarm
 	sbrs alarm, ALARM_SHOW				; check if alarm is set
 	rjmp display_time_no_alarm			; if bit is set jump to no_alarm
 	sbr arg, 0b0001						; MULTI set alarmbit
-	push arg							; MULTI: save alarmbit
-	ldi arg, 0x88						; LCD: set cursor on alarm position
-	rcall send_ins						
-	ldi arg, 0x0						; LCD: load alarm icon
-	rcall show_char						
+	push arg							; MULTI: save alarmbit					
+	ldi tmp, 0x0						; LCD: load alarm icon					
 	pop arg								; MULTI: pop last byte
 display_time_no_alarm:
 	rcall usart_send					; MULTI: send last byte to multisegment display
+	mov arg, tmp
+	rcall show_char
 	pop ZH
 	pop ZL								
 	ret
